@@ -7,6 +7,7 @@ urlpatterns = [
     # GuitarBud (Fretboard) URLs
     path('guitar/', views.guitar_bud_view, name='guitar_bud'),
     path('api/fretboard/', views.get_fretboard_data, name='fretboard_data'),
+    path('fretboard/', views.fretboard_view, name='fretboard'),
     path('api/play_melody/', views.play_melody, name='play_melody'),
     path('api/auto_compose/', views.auto_compose, name='auto_compose'),
 
@@ -22,5 +23,8 @@ urlpatterns = [
     # Utility URLs
     path('api/scales/', views.get_scales, name='get_scales'),
     path('api/tunings/', views.get_tunings, name='get_tunings'),
+
     path('analyzer/', views.audio_analyzer_view, name='audio_analyzer'),
+
+
 ]

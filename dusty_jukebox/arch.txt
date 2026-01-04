@@ -1,0 +1,134 @@
+# Dusty Jukebox Application Architecture
+
+## Function Names
+
+### Views (views.py)
+- guitar_bud_view
+- get_fretboard_data
+- play_melody
+- auto_compose
+- dusty_jukebox_view
+- get_audio_files
+- upload_audio
+- analyze_audio
+- load_track
+- play_audio
+- set_volume
+- get_scales
+- get_tunings
+- audio_analyzer_view
+
+### Models (models.py)
+- AudioMetadata.__str__
+- AudioMetadata.get_waveform_samples
+- AudioMetadata.set_waveform_samples
+- AudioMetadata.is_analysis_complete
+- AudioMetadata.get_file_hash
+- AudioFile.__str__
+- AudioFile.get_file_size_display
+- AudioFile.get_absolute_path
+- AudioFile.file_exists
+- GuitarTuning.__str__
+- GuitarTuning.get_string_notes
+- GuitarTuning.create_default_tunings
+- MusicalScale.__str__
+- MusicalScale.get_notes
+- MusicalScale.create_default_scales
+- UserSession.__str__
+
+### Audio Analyzer (audio_analyser.py)
+- detect_key
+- estimate_bpm_and_key
+
+### Admin Classes (admin.py)
+- AudioMetadataAdmin
+- AudioFileAdmin
+- GuitarTuningAdmin
+- MusicalScaleAdmin
+- UserSessionAdmin
+
+## Application Flow Chart
+
+```
+┌─────────────────┐
+│   Web Browser   │
+└─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│   Django URLs   │
+│   (urls.py)     │
+└─────────────────┘
+         │
+         ▼
+┌─────────────────┐    ┌─────────────────┐
+│   Views Layer   │    │   Admin Layer   │
+│   (views.py)    │    │   (admin.py)    │
+└─────────────────┘    └─────────────────┘
+         │                       │
+         ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐
+│   Models Layer  │    │   Django Admin  │
+│   (models.py)   │    │   Interface     │
+└─────────────────┘    └─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│   Database      │
+│   (SQLite/PostgreSQL)
+└─────────────────┘
+```
+
+## Detailed Flow: GuitarBud Feature
+
+```
+User Request → guitar_bud_view → Render Template
+                                      ↓
+                         get_fretboard_data → GuitarTuning Model
+                                      ↓
+                         play_melody/auto_compose → MusicalScale Model
+```
+
+## Detailed Flow: DustyJukebox Feature
+
+```
+User Request → dusty_jukebox_view → Render Template
+                                      ↓
+                         get_audio_files → AudioFile Model
+                                      ↓
+                         upload_audio → AudioFile Model → File Storage
+                                      ↓
+                         analyze_audio → AudioMetadata Model → audio_analyser.py
+                                      ↓
+                         load_track/play_audio/set_volume → pygame Integration
+```
+
+## Audio Analysis Flow
+
+```
+Audio File → estimate_bpm_and_key → librosa.load()
+                                      ↓
+                         BPM Detection → librosa.beat.beat_track()
+                                      ↓
+                         Key Detection → detect_key() → chroma features
+                                      ↓
+                         Save Results → AudioMetadata Model
+```
+
+## Data Flow Summary
+
+1. **User Interface Layer**: HTML templates rendered by Django views
+2. **API Layer**: JSON endpoints for AJAX requests (fretboard data, audio controls)
+3. **Business Logic Layer**: Views handle requests, models store data
+4. **External Integration**: pygame for audio playback, librosa for analysis
+5. **Data Persistence**: Django ORM with SQLite/PostgreSQL database
+6. **File Storage**: Django's default storage system for uploaded audio files
+
+## Key Components
+
+- **GuitarTuning**: Manages guitar tuning configurations
+- **MusicalScale**: Stores musical scale definitions
+- **AudioFile**: Tracks uploaded audio files
+- **AudioMetadata**: Stores analysis results (BPM, key, waveform)
+- **UserSession**: Maintains user state across sessions
+- **Audio Analyzer**: External Python script using librosa for music analysis
