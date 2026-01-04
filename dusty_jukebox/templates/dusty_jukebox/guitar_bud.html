@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GuitarBud - Interactive Guitar Fretboard</title>
+    {% load static %}
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.3s ease;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 3fr 2fr;
+            height: calc(100vh - 80px);
+        }
+
+        /* 🎸 Fretboard Area */
+        .fretboard-container {
+            padding: 20px;
+            overflow: auto;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .fretboard-grid {
+            display: grid;
+            grid-template-columns: repeat(22, 1fr);
+            grid-template-rows: repeat(6, 1fr);
+            gap: 2px;
+            aspect-ratio: 22/6;
+            max-width: 100%;
+            height: auto;
+        }
+
+        .fret {
+            background: #8B4513;
+            border: 1px solid #654321;
+            border-radius: 2px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: #FFD700;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        .fret:hover {
+            background: #A0522D;
+            transform: scale(1.05);
+        }
+
+        .fret.active {
+            background: #FFD700 !important;
+            color: #8B4513;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
+        }
+
+        .fret.note {
+            background: #FF6B6B;
+        }
+
+        /* 🎼 Side Panel */
+        .side-panel {
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-left: 1px solid rgba(255, 255, 255, 0.2);
+            overflow-y: auto;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-label {
+            font-weight: bold;
+            margin-bottom: 8px;
+            display: block;
+            color: #FFD700;
+        }
+
+        .scale-display {
+            font-size: 18px;
+            font-weight: bold;
+            color: #FFD700;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255, 215, 0, 0.1);
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        select, textarea, input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #2c3e50;
+            font-size: 14px;
+            margin-bottom: 10px;
+            resize: vertical;
+        }
+
+        select:focus, textarea:focus, input[type="text"]:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px #FFD700;
+        }
+
+        textarea {
+            min-height: 60px;
+        }
+
+        .button-group {
+            margin-top: 30px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 10px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            color: #2c3e50;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #95a5a6, #7f8c8d);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(149, 165, 166, 0.3);
+        }
+
+        .btn-accent {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+            color: white;
+        }
+
+        .btn-accent:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+        }
+
+        /* Status Messages */
+        .status-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+            max-width: 300px;
+        }
+
+        .status-success {
+            background: #27ae60;
+        }
+
+        .status-error {
+            background: #e74c3c;
+        }
+
+        .status-info {
+            background: #3498db;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr auto;
+            }
+
+            .fretboard-container {
+                padding: 10px;
+            }
+
+            .side-panel {
+                border-left: none;
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
+                max-height: 300px;
+            }
+        }
+
+        /* Animation for notes */
+        @keyframes notePulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .note-playing {
+            animation: notePulse 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎸 GuitarBud - Interactive Guitar Fretboard</h1>
+        <a href="{% url 'intro:home' %}" class="back-btn">← Back to Home</a>
+    </div>
+
+    <div class="container">
+        <!-- 🎸 Fretboard Area -->
+        <div class="fretboard-container">
+            <div class="fretboard-grid" id="fretboard">
+                <!-- Fretboard will be generated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- 🎼 Side Panel -->
+        <div class="side-panel">
+            <div class="scale-display" id="scaleDisplay">
+                Scale: A Minor
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Tuning:</label>
+                <select id="tuningSelector">
+                    {% for tuning in available_tunings %}
+                    <option value="{{ tuning.name }}" {% if tuning == current_tuning %}selected{% endif %}>
+                        {{ tuning.display_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Notes to Play (Melody):</label>
+                <textarea id="melodyTextBox" placeholder="Enter notes like: C4, D4, E4, F4..."></textarea>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Chords to Play (Harmony):</label>
+                <textarea id="chordTextBox" placeholder="Enter chords like: Am, F, C, G..."></textarea>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Time Signature:</label>
+                <select id="timeSignatureSelect">
+                    <option value="4/4" selected>4/4</option>
+                    <option value="3/4">3/4</option>
+                    <option value="6/8">6/8</option>
+                </select>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-primary" id="playMelodyBtn">
+                    🎵 Play Melody
+                </button>
+                <button class="btn btn-secondary" id="autoComposeBtn">
+                    ✨ Auto Compose
+                </button>
+                <button class="btn btn-accent" id="refreshBtn">
+                    🔁 Refresh Fretboard
+                </button>
+            </div>
+
+            <!-- Link to DustyJukebox -->
+            <div style="margin-top: 20px; text-align: center;">
+                <a href="{% url 'dusty_jukebox:dusty_jukebox' %}" class="btn btn-info" style="display: inline-block; width: auto;">
+                    🎵 Open DustyJukebox
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Current state
+        let currentTuning = '{{ current_tuning.name|default:"standard" }}';
+        let fretboardData = {};
+        let fretboardGrid = [];
+
+        // API helper functions
+        async function apiCall(endpoint, options = {}) {
+            try {
+                const response = await fetch(endpoint, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        ...options.headers
+                    },
+                    ...options
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                showMessage('API Error: ' + error.message, 'error');
+                return null;
+            }
+        }
+
+        // Show user messages
+        function showMessage(message, type = 'info') {
+            // Remove existing messages
+            const existing = document.querySelectorAll('.status-message');
+            existing.forEach(msg => msg.remove());
+
+            // Create new message
+            const messageEl = document.createElement('div');
+            messageEl.className = `status-message status-${type}`;
+            messageEl.textContent = message;
+            document.body.appendChild(messageEl);
+
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                if (messageEl.parentNode) {
+                    messageEl.style.animation = 'slideOut 0.3s ease';
+                    setTimeout(() => messageEl.remove(), 300);
+                }
+            }, 3000);
+        }
+
+        // Initialize fretboard from API
+        async function initializeFretboard(tuning = 'standard') {
+            const fretboard = document.getElementById('fretboard');
+            fretboard.innerHTML = '<div class="loading">🎸 Loading fretboard...</div>';
+
+            try {
+                fretboardData = await apiCall(`/dusty_jukebox/api/fretboard/?tuning=${encodeURIComponent(tuning)}`);
+                if (!fretboardData) throw new Error('Failed to load fretboard data');
+
+                fretboard.innerHTML = '';
+                fretboardGrid = [];
+
+                // Create fretboard from API data
+                fretboardData.strings.forEach((stringData, stringIndex) => {
+                    fretboardGrid[stringIndex] = [];
+
+                    stringData.frets.forEach((fretData, fretIndex) => {
+                        const fretElement = document.createElement('div');
+                        fretElement.className = 'fret';
+                        fretElement.dataset.string = stringIndex;
+                        fretElement.dataset.fret = fretData.fret;
+                        fretElement.dataset.note = fretData.note;
+                        fretElement.textContent = fretData.note.replace(/\d+$/, ''); // Remove octave for cleaner display
+
+                        // Add click handler
+                        fretElement.addEventListener('click', () => toggleFret(fretElement));
+
+                        fretboard.appendChild(fretElement);
+                        fretboardGrid[stringIndex][fretIndex] = fretElement;
+                    });
+                });
+
+                currentTuning = tuning;
+                showMessage(`Fretboard loaded: ${fretboardData.tuning}`, 'success');
+
+            } catch (error) {
+                fretboard.innerHTML = '<div class="error">❌ Failed to load fretboard</div>';
+                console.error('Failed to initialize fretboard:', error);
+                showMessage('Failed to load fretboard', 'error');
+            }
+        }
+
+        // Toggle fret selection
+        async function toggleFret(fretElement) {
+            const note = fretElement.dataset.note;
+
+            fretElement.classList.toggle('active');
+
+            // Add visual feedback
+            if (fretElement.classList.contains('active')) {
+                fretElement.classList.add('note-playing');
+
+                // Try to play the note via API
+                const result = await apiCall('/dusty_jukebox/api/play_melody/', {
+                    method: 'POST',
+                    body: JSON.stringify({ melody: note })
+                });
+
+                if (result && result.success) {
+                    showMessage(`Playing: ${note}`, 'success');
+                } else {
+                    showMessage(`Note ${note} not available`, 'error');
+                }
+
+                setTimeout(() => fretElement.classList.remove('note-playing'), 500);
+            }
+        }
+
+        // Handle tuning change
+        document.getElementById('tuningSelector').addEventListener('change', async function() {
+            const newTuning = this.value;
+            await initializeFretboard(newTuning);
+
+            // Update scale display to show current tuning
+            document.getElementById('scaleDisplay').textContent = `Tuning: ${this.options[this.selectedIndex].text}`;
+        });
+
+        // Play melody button
+        document.getElementById('playMelodyBtn').addEventListener('click', async function() {
+            const melodyText = document.getElementById('melodyTextBox').value.trim();
+            if (!melodyText) {
+                showMessage('Please enter some notes in the melody textbox!', 'error');
+                return;
+            }
+
+            this.disabled = true;
+            this.textContent = '🎵 Playing...';
+
+            try {
+                const result = await apiCall('/dusty_jukebox/api/play_melody/', {
+                    method: 'POST',
+                    body: JSON.stringify({ melody: melodyText })
+                });
+
+                if (result && result.success) {
+                    showMessage(`Melody played: ${result.melody.join(', ')}`, 'success');
+                } else {
+                    showMessage('Failed to play melody', 'error');
+                }
+            } catch (error) {
+                showMessage('Failed to play melody', 'error');
+            } finally {
+                this.disabled = false;
+                this.textContent = '🎵 Play Melody';
+            }
+        });
+
+        // Auto compose button
+        document.getElementById('autoComposeBtn').addEventListener('click', async function() {
+            this.disabled = true;
+            this.textContent = '✨ Composing...';
+
+            try {
+                const result = await apiCall('/dusty_jukebox/api/auto_compose/', {
+                    method: 'POST',
+                    body: JSON.stringify({ scale: 'a_minor' })
+                });
+
+                if (result) {
+                    // Update melody textbox
+                    document.getElementById('melodyTextBox').value = result.melody.join(', ');
+
+                    // Update chord textbox
+                    document.getElementById('chordTextBox').value = result.chords.join(' - ');
+
+                    showMessage(`Auto-composed ${result.scale} melody!`, 'success');
+                }
+            } catch (error) {
+                showMessage('Failed to compose melody', 'error');
+            } finally {
+                this.disabled = false;
+                this.textContent = '✨ Auto Compose';
+            }
+        });
+
+        // Refresh fretboard button
+        document.getElementById('refreshBtn').addEventListener('click', async function() {
+            // Clear all active frets
+            document.querySelectorAll('.fret.active').forEach(fret => {
+                fret.classList.remove('active');
+            });
+
+            await initializeFretboard(currentTuning);
+        });
+
+        // Get CSRF token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookies[i].trim().substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookies[i].trim().substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async function() {
+            await initializeFretboard(currentTuning);
+
+            // Add CSS for slideOut animation
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey || event.metaKey) {
+                switch(event.key) {
+                    case 'r':
+                        event.preventDefault();
+                        document.getElementById('refreshBtn').click();
+                        break;
+                    case 'p':
+                        event.preventDefault();
+                        document.getElementById('playMelodyBtn').click();
+                        break;
+                    case 'a':
+                        event.preventDefault();
+                        document.getElementById('autoComposeBtn').click();
+                        break;
+                }
+            }
+        });
+    </script>
+</body>
+</html>

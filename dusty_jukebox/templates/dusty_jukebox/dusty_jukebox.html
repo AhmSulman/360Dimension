@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dusty Jukebox - Audio Player & Analyzer</title>
+    {% load static %}
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.3s ease;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 30px;
+            height: calc(100vh - 120px);
+        }
+
+        /* Audio File List */
+        .file-list-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .file-list-section h2 {
+            margin-bottom: 15px;
+            color: #FFD700;
+            font-size: 1.2rem;
+        }
+
+        .file-list {
+            flex: 1;
+            overflow-y: auto;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .file-item {
+            padding: 12px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-left: 3px solid transparent;
+        }
+
+        .file-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateX(5px);
+        }
+
+        .file-item.active {
+            background: rgba(255, 215, 0, 0.2);
+            border-left-color: #FFD700;
+        }
+
+        .file-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .file-meta {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .upload-btn {
+            margin-top: 15px;
+            padding: 10px 15px;
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+        }
+
+        /* Player Controls */
+        .player-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Waveform Display */
+        .waveform-container {
+            height: 150px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .waveform-placeholder {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 1.1rem;
+        }
+
+        .waveform-canvas {
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+
+        /* Metadata Display */
+        .metadata-display {
+            text-align: center;
+        }
+
+        .bpm-display, .key-display {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        .bpm-display {
+            background: rgba(52, 152, 219, 0.2);
+            color: #3498db;
+        }
+
+        .key-display {
+            background: rgba(155, 89, 182, 0.2);
+            color: #9b59b6;
+        }
+
+        .key-display.minor {
+            background: rgba(155, 89, 182, 0.3);
+            color: #8e44ad;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            width: 100%;
+        }
+
+        .progress-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+        }
+
+        .progress-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #FFD700;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        .progress-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #FFD700;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        .time-display {
+            text-align: center;
+            margin-top: 5px;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        /* Volume Control */
+        .volume-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .volume-label {
+            font-weight: 500;
+            min-width: 60px;
+        }
+
+        .volume-slider {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #27ae60;
+            cursor: pointer;
+        }
+
+        .volume-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #27ae60;
+            cursor: pointer;
+            border: none;
+        }
+
+        /* Control Buttons */
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            min-width: 80px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            color: #2c3e50;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #95a5a6, #7f8c8d);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(149, 165, 166, 0.3);
+        }
+
+        .btn-success {
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(39, 174, 96, 0.3);
+        }
+
+        .btn-info {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+        }
+
+        .btn-info:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+        }
+
+        .btn-warning {
+            background: linear-gradient(45deg, #f39c12, #e67e22);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(243, 156, 18, 0.3);
+        }
+
+        /* Audio Device Selection */
+        .device-selection {
+            margin-top: 20px;
+        }
+
+        .device-label {
+            font-weight: 500;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .device-select {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #2c3e50;
+            font-size: 14px;
+        }
+
+        /* GuitarBud Button */
+        .guitar-btn {
+            margin-top: 20px;
+            padding: 15px;
+            background: linear-gradient(45deg, #8e44ad, #9b59b6);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 16px;
+        }
+
+        .guitar-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(142, 68, 173, 0.3);
+        }
+
+        /* Status Messages */
+        .status-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+            max-width: 300px;
+        }
+
+        .status-success {
+            background: #27ae60;
+        }
+
+        .status-error {
+            background: #e74c3c;
+        }
+
+        .status-info {
+            background: #3498db;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+                gap: 20px;
+                height: auto;
+            }
+
+            .file-list-section {
+                max-height: 300px;
+            }
+
+            .control-buttons {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .volume-container {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #FFD700;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎵 Dusty Jukebox - Audio Player & Analyzer</h1>
+        <a href="{% url 'intro:home' %}" class="back-btn">← Back to Home</a>
+    </div>
+
+    <div class="container">
+        <!-- Audio File List -->
+        <div class="file-list-section">
+            <h2>🎵 Audio Files</h2>
+            <div class="file-list" id="fileList">
+                {% if has_files %}
+                    {% for file in user_files %}
+                    <div class="file-item" onclick="selectFile('{{ file.file_path }}', {{ forloop.counter0 }})">
+                        <div class="file-name">{{ file.file_name }}</div>
+                        <div class="file-meta">
+                            <span>{{ file.get_file_size_display }}</span>
+                            {% if file.metadata %}
+                                <span>BPM: {{ file.metadata.bpm|default:'--' }} | Key: {{ file.metadata.key|default:'--' }}</span>
+                            {% else %}
+                                <span>Not analyzed</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="file-item">
+                        <div class="file-name">No files uploaded</div>
+                        <div class="file-meta">Click "Upload Files" to add audio files</div>
+                    </div>
+                {% endif %}
+            </div>
+            <input type="file" id="fileInput" multiple accept="audio/*" style="display: none;" onchange="handleFileSelect(event)">
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📁 Upload Files</button>
+        </div>
+
+        <!-- Player Controls -->
+        <div class="player-section">
+            <!-- Waveform Display -->
+            <div class="waveform-container">
+                <div class="waveform-placeholder" id="waveformPlaceholder">
+                    🎵 Select and analyze a track to see waveform
+                </div>
+                <canvas class="waveform-canvas" id="waveformCanvas"></canvas>
+            </div>
+
+            <!-- Metadata Display -->
+            <div class="metadata-display">
+                <div class="bpm-display" id="bpmDisplay">BPM: --</div>
+                <div class="key-display" id="keyDisplay">Key: --</div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-container">
+                <input type="range" class="progress-slider" id="progressSlider" min="0" max="100" value="0" step="0.1">
+                <div class="time-display" id="timeDisplay">0:00 / 0:00</div>
+            </div>
+
+            <!-- Volume Control -->
+            <div class="volume-container">
+                <span class="volume-label">🔊 Volume</span>
+                <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" value="0.5" step="0.1">
+            </div>
+
+            <!-- Control Buttons -->
+            <div class="control-buttons">
+                <button class="btn btn-primary" id="playBtn" onclick="playAudio()">▶️ Play</button>
+                <button class="btn btn-secondary" id="pauseBtn" onclick="pauseAudio()">⏸️ Pause</button>
+                <button class="btn btn-success" id="analyzeBtn" onclick="analyzeAudio()">🔍 Analyze</button>
+                <button class="btn btn-info" id="loadBtn" onclick="loadTrack()">📀 Load</button>
+            </div>
+
+            <!-- Audio Device Selection -->
+            <div class="device-selection">
+                <label class="device-label">🔊 Output Device</label>
+                <select class="device-select" id="outputDeviceSelect">
+                    <option value="default">Default Device</option>
+                </select>
+            </div>
+
+            <!-- GuitarBud Button -->
+            <button class="guitar-btn" onclick="openGuitarBud()">
+                🎸 Open Guitar Bud
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentAudio = null;
+        let isPlaying = false;
+        let currentFilePath = null;
+        let audioContext = null;
+        let analyser = null;
+        let audioBuffer = null;
+
+        // API helper functions
+        async function apiCall(endpoint, options = {}) {
+            try {
+                const response = await fetch(endpoint, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        ...options.headers
+                    },
+                    ...options
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                showMessage('API Error: ' + error.message, 'error');
+                return null;
+            }
+        }
+
+        // Show status messages
+        function showMessage(message, type = 'info') {
+            // Remove existing messages
+            const existing = document.querySelectorAll('.status-message');
+            existing.forEach(msg => msg.remove());
+
+            // Create new message
+            const messageEl = document.createElement('div');
+            messageEl.className = `status-message status-${type}`;
+            messageEl.textContent = message;
+            document.body.appendChild(messageEl);
+
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                if (messageEl.parentNode) {
+                    messageEl.style.animation = 'slideOut 0.3s ease';
+                    setTimeout(() => messageEl.remove(), 300);
+                }
+            }, 3000);
+        }
+
+        // Select a file
+        function selectFile(filePath, index) {
+            // Update UI to show selected file
+            const fileItems = document.querySelectorAll('.file-item');
+            fileItems.forEach(item => item.classList.remove('active'));
+            fileItems[index].classList.add('active');
+
+            currentFilePath = filePath;
+
+            // Update metadata display
+            updateMetadataDisplay(filePath);
+
+            showMessage('File selected: ' + filePath.split('/').pop(), 'success');
+        }
+
+        // Update metadata display
+        async function updateMetadataDisplay(filePath) {
+            try {
+                const response = await apiCall('/dusty_jukebox/api/analyze/', {
+                    method: 'POST',
+                    body: JSON.stringify({ path: filePath })
+                });
+
+                if (response && response.success) {
+                    document.getElementById('bpmDisplay').textContent = `BPM: ${response.bpm}`;
+                    document.getElementById('keyDisplay').textContent = `Key: ${response.key}`;
+
+                    if (response.is_minor) {
+                        document.getElementById('keyDisplay').classList.add('minor');
+                    } else {
+                        document.getElementById('keyDisplay').classList.remove('minor');
+                    }
+
+                    // Show waveform if available
+                    if (response.waveform) {
+                        displayWaveform(response.waveform);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load metadata:', error);
+            }
+        }
+
+        // Load and play track
+        async function loadTrack() {
+            if (!currentFilePath) {
+                showMessage('Please select a file first', 'error');
+                return;
+            }
+
+            try {
+                const response = await apiCall('/dusty_jukebox/api/load_track/', {
+                    method: 'POST',
+                    body: JSON.stringify({ path: currentFilePath })
+                });
+
+                if (response && response.success) {
+                    showMessage('Track loaded successfully', 'success');
+                } else {
+                    showMessage('Failed to load track', 'error');
+                }
+            } catch (error) {
+                console.error('Failed to load track:', error);
+                showMessage('Failed to load track', 'error');
+            }
+        }
+
+        // Play audio
+        async function playAudio() {
+            try {
+                const response = await apiCall('/dusty_jukebox/api/play/', {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'play' })
+                });
+
+                if (response && response.success) {
+                    isPlaying = true;
+                    updatePlayButton();
+                    showMessage('Playing', 'success');
+                } else {
+                    showMessage('Failed to play audio', 'error');
+                }
+            } catch (error) {
+                console.error('Failed to play audio:', error);
+                showMessage('Failed to play audio', 'error');
+            }
+        }
+
+        // Pause audio
+        async function pauseAudio() {
+            try {
+                const response = await apiCall('/dusty_jukebox/api/play/', {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'pause' })
+                });
+
+                if (response && response.success) {
+                    isPlaying = false;
+                    updatePlayButton();
+                    showMessage('Paused', 'info');
+                } else {
+                    showMessage('Failed to pause audio', 'error');
+                }
+            } catch (error) {
+                console.error('Failed to pause audio:', error);
+                showMessage('Failed to pause audio', 'error');
+            }
+        }
+
+        // Analyze audio
+        async function analyzeAudio() {
+            if (!currentFilePath) {
+                showMessage('Please select a file first', 'error');
+                return;
+            }
+
+            document.getElementById('analyzeBtn').innerHTML = '<span class="loading"></span> Analyzing...';
+            document.getElementById('analyzeBtn').disabled = true;
+
+            try {
+                const response = await apiCall('/dusty_jukebox/api/analyze/', {
+                    method: 'POST',
+                    body: JSON.stringify({ path: currentFilePath })
+                });
+
+                if (response && response.success) {
+                    // Update displays
+                    updateMetadataDisplay(currentFilePath);
+                    showMessage('Analysis complete!', 'success');
+                } else {
+                    showMessage('Analysis failed: ' + (response.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Analysis failed:', error);
+                showMessage('Analysis failed', 'error');
+            } finally {
+                document.getElementById('analyzeBtn').innerHTML = '🔍 Analyze';
+                document.getElementById('analyzeBtn').disabled = false;
+            }
+        }
+
+        // Display waveform
+        function displayWaveform(waveformData) {
+            const canvas = document.getElementById('waveformCanvas');
+            const placeholder = document.getElementById('waveformPlaceholder');
+
+            if (waveformData && canvas) {
+                canvas.style.display = 'block';
+                placeholder.style.display = 'none';
+
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width = canvas.offsetWidth;
+                const height = canvas.height = canvas.offsetHeight;
+
+                // Draw waveform (simplified version)
+                ctx.clearRect(0, 0, width, height);
+                ctx.strokeStyle = '#FFD700';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+
+                const sliceWidth = width / waveformData.length;
+                let x = 0;
+
+                for (let i = 0; i < waveformData.length; i++) {
+                    const v = waveformData[i] / 128.0;
+                    const y = v * height / 2 + height / 2;
+
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+
+                    x += sliceWidth;
+                }
+
+                ctx.stroke();
+            }
+        }
+
+        // Update progress
+        function updateProgress() {
+            if (currentAudio) {
+                const progress = (currentAudio.currentTime / currentAudio.duration) * 100;
+                document.getElementById('progressSlider').value = progress;
+                updateTimeDisplay();
+            }
+        }
+
+        // Update time display
+        function updateTimeDisplay() {
+            if (currentAudio) {
+                const current = formatTime(currentAudio.currentTime);
+                const total = formatTime(currentAudio.duration || 0);
+                document.getElementById('timeDisplay').textContent = `${current} / ${total}`;
+            }
+        }
+
+        // Format time in MM:SS
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Update play button state
+        function updatePlayButton() {
+            const playBtn = document.getElementById('playBtn');
+            if (isPlaying) {
+                playBtn.innerHTML = '⏸️ Playing';
+                playBtn.classList.add('playing');
+            } else {
+                playBtn.innerHTML = '▶️ Play';
+                playBtn.classList.remove('playing');
+            }
+        }
+
+        // Progress slider change
+        document.getElementById('progressSlider').addEventListener('input', function() {
+            // In a real implementation, this would seek the audio
+            showMessage(`Seeking to: ${this.value}%`, 'info');
+        });
+
+        // Volume slider change
+        document.getElementById('volumeSlider').addEventListener('input', async function() {
+            try {
+                const response = await apiCall('/dusty_jukebox/api/volume/', {
+                    method: 'POST',
+                    body: JSON.stringify({ volume: parseFloat(this.value) })
+                });
+
+                if (response && response.success) {
+                    showMessage(`Volume: ${Math.round(response.volume * 100)}%`, 'success');
+                }
+            } catch (error) {
+                console.error('Failed to set volume:', error);
+            }
+        });
+
+        // Handle file selection
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            uploadFiles(files);
+        }
+
+        // Upload files to server
+        async function uploadFiles(files) {
+            if (files.length === 0) return;
+
+            const formData = new FormData();
+            files.forEach(file => {
+                formData.append('files', file);
+            });
+
+            try {
+                const response = await fetch('/dusty_jukebox/api/upload/', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    }
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    showMessage(`Uploaded ${files.length} files`, 'success');
+                    // Reload file list
+                    location.reload();
+                } else {
+                    showMessage('Upload failed', 'error');
+                }
+            } catch (error) {
+                console.error('Upload failed:', error);
+                showMessage('Upload failed', 'error');
+            }
+        }
+
+        // Open GuitarBud
+        function openGuitarBud() {
+            window.location.href = '{% url "dusty_jukebox:guitar_bud" %}';
+        }
+
+        // Get CSRF token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookies[i].trim().substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookies[i].trim().substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load initial file list
+            updateFileList();
+
+            // Add CSS for slideOut animation
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        });
+
+        // Update file list (simplified - in real app this would fetch from API)
+        function updateFileList() {
+            // File list is already rendered server-side
+            // In a more dynamic version, this would fetch via AJAX
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey || event.metaKey) {
+                switch(event.key) {
+                    case 'o':
+                        event.preventDefault();
+                        document.getElementById('fileInput').click();
+                        break;
+                    case ' ':
+                        event.preventDefault();
+                        if (isPlaying) {
+                            pauseAudio();
+                        } else {
+                            playAudio();
+                        }
+                        break;
+                    case 'a':
+                        event.preventDefault();
+                        analyzeAudio();
+                        break;
+                    case 'l':
+                        event.preventDefault();
+                        loadTrack();
+                        break;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
