@@ -67,12 +67,24 @@
 
         .fretboard-grid {
             display: grid;
-            grid-template-columns: repeat(22, 1fr);
-            grid-template-rows: repeat(6, 1fr);
+            grid-template-columns: repeat(17, 1fr);
+            grid-template-rows: repeat(7, 1fr);
             gap: 2px;
-            aspect-ratio: 22/6;
+            aspect-ratio: 17/7;
             max-width: 100%;
             height: auto;
+        }
+
+        .fret-number {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            margin-bottom: 5px;
         }
 
         .fret {
@@ -164,24 +176,32 @@
 
         .btn {
             width: 100%;
-            padding: 12px;
-            margin-bottom: 10px;
+            padding: 15px 20px;
+            margin-bottom: 12px;
             border: none;
-            border-radius: 8px;
-            font-weight: 600;
+            border-radius: 12px;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.3s ease;
-            font-size: 14px;
+            font-size: 16px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         .btn-primary {
-            background: linear-gradient(45deg, #FFD700, #FFA500);
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
             color: #2c3e50;
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.3);
+            box-shadow: 0 8px 15px rgba(255, 215, 0, 0.4);
         }
 
         .btn-secondary {
@@ -263,6 +283,62 @@
         .note-playing {
             animation: notePulse 0.5s ease-in-out;
         }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 2000;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            margin: 5% auto;
+            padding: 20px;
+            width: 80%;
+            max-width: 600px;
+            border-radius: 12px;
+            color: white;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .close-modal {
+            color: #FFD700;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .chord-chart-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .chord-chart-table th, .chord-chart-table td {
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .chord-chart-table th {
+            background: rgba(255, 215, 0, 0.2);
+            color: #FFD700;
+        }
+
+        .frets-tab {
+            font-family: monospace;
+            background: rgba(0,0,0,0.3);
+            padding: 5px;
+            border-radius: 4px;
+            letter-spacing: 2px;
+        }
     </style>
 </head>
 <body>
@@ -297,6 +373,17 @@
             </div>
 
             <div class="control-group">
+                <label class="control-label">Tempo (BPM):</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="number" id="tempoInput" value="120" min="40" max="240" style="flex: 1; margin: 0;">
+                    <label style="color: white; display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <input type="checkbox" id="loopCheckbox" style="width: auto; margin: 0; transform: scale(1.2);">
+                        Loop Playback
+                    </label>
+                </div>
+            </div>
+
+            <div class="control-group">
                 <label class="control-label">Notes to Play (Melody):</label>
                 <textarea id="melodyTextBox" placeholder="Enter notes like: C4, D4, E4, F4..."></textarea>
             </div>
@@ -322,17 +409,55 @@
                 <button class="btn btn-secondary" id="autoComposeBtn">
                     ✨ Auto Compose
                 </button>
+                <button class="btn btn-secondary" id="openDropCChartBtn" style="background: linear-gradient(135deg, #8e44ad, #9b59b6);">
+                    🎸 Drop C Chord Chart
+                </button>
                 <button class="btn btn-accent" id="refreshBtn">
                     🔁 Refresh Fretboard
                 </button>
             </div>
 
-            <!-- Link to DustyJukebox -->
-            <div style="margin-top: 20px; text-align: center;">
-                <a href="{% url 'dusty_jukebox:dusty_jukebox' %}" class="btn btn-info" style="display: inline-block; width: auto;">
+            <!-- Links -->
+            <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px; text-align: center;">
+                <a href="{% url 'dusty_jukebox:piano' %}" class="btn btn-primary" style="background: linear-gradient(135deg, #e74c3c, #c0392b);">
+                    🎹 Open Piano Tutor
+                </a>
+                <a href="{% url 'dusty_jukebox:dusty_jukebox' %}" class="btn btn-info">
                     🎵 Open DustyJukebox
                 </a>
             </div>
+        </div>
+    </div>
+
+    <!-- Drop C Chord Chart Modal -->
+    <div id="dropCModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="closeDropCModal">&times;</span>
+            <h2 style="color: #FFD700; margin-bottom: 15px;">🎸 Drop C Chord Chart</h2>
+            <p style="margin-bottom: 15px;">Drop C Tuning from Low to High: <strong style="color:#e74c3c;">C - G - C - F - A - D</strong></p>
+            <p>Power chords are straight barres across the lowest 3 strings in drop tunings!</p>
+            
+            <table class="chord-chart-table">
+                <thead>
+                    <tr>
+                        <th>Chord</th>
+                        <th>Type</th>
+                        <th>Tab (Low C to High D)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>C5</td><td>Power</td><td><span class="frets-tab">0-0-0-x-x-x</span></td></tr>
+                    <tr><td>D5</td><td>Power</td><td><span class="frets-tab">2-2-2-x-x-x</span></td></tr>
+                    <tr><td>Eb5</td><td>Power</td><td><span class="frets-tab">3-3-3-x-x-x</span></td></tr>
+                    <tr><td>E5</td><td>Power</td><td><span class="frets-tab">4-4-4-x-x-x</span></td></tr>
+                    <tr><td>F5</td><td>Power</td><td><span class="frets-tab">5-5-5-x-x-x</span></td></tr>
+                    <tr><td>G5</td><td>Power</td><td><span class="frets-tab">7-7-7-x-x-x</span></td></tr>
+                    <tr><td>A5</td><td>Power</td><td><span class="frets-tab">9-9-9-x-x-x</span></td></tr>
+                    <tr><td>Bb5</td><td>Power</td><td><span class="frets-tab">10-10-10-x-x-x</span></td></tr>
+                    <tr><td>C Major</td><td>Open/Barre</td><td><span class="frets-tab">x-3-2-0-1-0</span></td></tr>
+                    <tr><td>D Minor</td><td>Open/Barre</td><td><span class="frets-tab">0-0-0-2-3-1</span></td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -341,7 +466,48 @@
         let currentTuning = '{{ current_tuning.name|default:"standard" }}';
         let fretboardData = {};
         let fretboardGrid = [];
+        // --- WebAudio synth (simple sine beep) ---
+        let audioCtx = null;
 
+        function getAudioContext() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return audioCtx;
+        }
+
+        // Accepts notes like "E2", "Db3", "C#4"
+        const SHARP_TO_FLAT = {"C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb"};
+
+        function getFlatNoteName(note) {
+            const m = /^([A-Ga-g])([#b]?)(\d+)$/.exec(note.trim());
+            if (!m) return note;
+            let [, letter, accidental, octaveStr] = m;
+            letter = letter.toUpperCase();
+            if (accidental === '#') {
+                const flatName = SHARP_TO_FLAT[letter + '#'];
+                if (flatName) return flatName + octaveStr;
+            }
+            return letter + accidental + octaveStr;
+        }
+
+        // Keep this for future ref but we don't need WebAudio anymore for simple playback
+        function noteToFrequency(note) {
+            // ... (rest unchanged, just in case)
+            return null;
+        }
+
+        function playTone(note, durationMs = 180, volume = 0.5) {
+            const flatNote = getFlatNoteName(note);
+            // Construct the path to the piano sample
+            const audioUrl = `{% static 'dusty_jukebox/Piano/Piano.pp.' %}${flatNote}.wav`;
+            
+            const audio = new Audio(audioUrl);
+            audio.volume = volume;
+            audio.play().catch(e => {
+                console.warn(`Could not play audio for ${note}:`, e);
+            });
+        }
         // API helper functions
         async function apiCall(endpoint, options = {}) {
             try {
@@ -388,11 +554,19 @@
             fretboard.innerHTML = '<div class="loading">🎸 Loading fretboard...</div>';
 
             try {
-                fretboardData = await apiCall(`/dusty_jukebox/api/fretboard/?tuning=${encodeURIComponent(tuning)}`);
+                fretboardData = await apiCall(`{% url 'dusty_jukebox:fretboard_data' %}?tuning=${encodeURIComponent(tuning)}`);
                 if (!fretboardData) throw new Error('Failed to load fretboard data');
 
                 fretboard.innerHTML = '';
                 fretboardGrid = [];
+
+                // Create fret numbers row (0 to frets)
+                for (let i = 0; i <= fretboardData.frets; i++) {
+                    const numberEl = document.createElement('div');
+                    numberEl.className = 'fret-number';
+                    numberEl.textContent = i === 0 ? 'Open' : i;
+                    fretboard.appendChild(numberEl);
+                }
 
                 // Create fretboard from API data
                 fretboardData.strings.forEach((stringData, stringIndex) => {
@@ -427,25 +601,17 @@
         // Toggle fret selection
         async function toggleFret(fretElement) {
             const note = fretElement.dataset.note;
-
+        
             fretElement.classList.toggle('active');
-
+        
             // Add visual feedback
             if (fretElement.classList.contains('active')) {
                 fretElement.classList.add('note-playing');
-
+        
                 // Try to play the note via API
-                const result = await apiCall('/dusty_jukebox/api/play_melody/', {
-                    method: 'POST',
-                    body: JSON.stringify({ melody: note })
-                });
-
-                if (result && result.success) {
-                    showMessage(`Playing: ${note}`, 'success');
-                } else {
-                    showMessage(`Note ${note} not available`, 'error');
-                }
-
+                playTone(note);
+                showMessage(`Playing: ${note}`, 'success');
+        
                 setTimeout(() => fretElement.classList.remove('note-playing'), 500);
             }
         }
@@ -459,33 +625,124 @@
             document.getElementById('scaleDisplay').textContent = `Tuning: ${this.options[this.selectedIndex].text}`;
         });
 
+        const chordDict = {
+            'Am': ['A3', 'C4', 'E4'],
+            'A':  ['A3', 'C#4', 'E4'],
+            'C':  ['C3', 'E3', 'G3'],
+            'D':  ['D3', 'F#3', 'A3'],
+            'Dm': ['D3', 'F3', 'A3'],
+            'E':  ['E3', 'G#3', 'B3'],
+            'Em': ['E3', 'G3', 'B3'],
+            'F':  ['F3', 'A3', 'C4'],
+            'G':  ['G3', 'B3', 'D4'],
+            'Bm': ['B3', 'D4', 'F#4']
+        };
+
+        function playChord(chordName) {
+            const notes = chordDict[chordName.trim()];
+            if (notes) {
+                notes.forEach(note => playTone(note, 600, 0.3));
+            }
+        }
+
+        let playbackTimeouts = [];
+        let isPlaying = false;
+
+        function stopPlayback() {
+            playbackTimeouts.forEach(t => clearTimeout(t));
+            playbackTimeouts = [];
+            isPlaying = false;
+            const btn = document.getElementById('playMelodyBtn');
+            btn.textContent = '🎵 Play Melody';
+            btn.classList.remove('btn-accent');
+            btn.classList.add('btn-primary');
+        }
+
         // Play melody button
         document.getElementById('playMelodyBtn').addEventListener('click', async function() {
+            if (isPlaying) {
+                stopPlayback();
+                return;
+            }
+
             const melodyText = document.getElementById('melodyTextBox').value.trim();
+            const chordText = document.getElementById('chordTextBox').value.trim();
+            const bpm = parseInt(document.getElementById('tempoInput').value) || 120;
+            const msPerBeat = 60000 / bpm;
+            const shouldLoop = document.getElementById('loopCheckbox').checked;
+
             if (!melodyText) {
                 showMessage('Please enter some notes in the melody textbox!', 'error');
                 return;
             }
 
-            this.disabled = true;
-            this.textContent = '🎵 Playing...';
+            isPlaying = true;
+            this.textContent = '⏹ Stop Playback';
+            this.classList.remove('btn-primary');
+            this.classList.add('btn-accent');
 
             try {
-                const result = await apiCall('/dusty_jukebox/api/play_melody/', {
+                const result = await apiCall("{% url 'dusty_jukebox:play_melody' %}", {
                     method: 'POST',
                     body: JSON.stringify({ melody: melodyText })
                 });
 
                 if (result && result.success) {
-                    showMessage(`Melody played: ${result.melody.join(', ')}`, 'success');
+                    showMessage(`Playing Melody...`, 'success');
+                    
+                    const chords = chordText ? chordText.split('-').map(c => c.trim()).filter(c => c) : [];
+                    const totalSequenceMs = result.melody.length * msPerBeat;
+
+                    const playSequence = () => {
+                        if (!isPlaying) return;
+
+                        // Play notes sequentially
+                        for (let i = 0; i < result.melody.length; i++) {
+                            const timeoutId = setTimeout(() => {
+                                const noteStr = result.melody[i];
+                                playTone(noteStr);
+                                
+                                // Play chord on the first beat of each measure (approx every 4 notes)
+                                if (i % 4 === 0 && chords.length > 0) {
+                                    const chordIdx = (i / 4) % chords.length;
+                                    playChord(chords[Math.floor(chordIdx)]);
+                                }
+                                
+                                // Visual feedback on fretboard
+                                const frets = document.querySelectorAll('.fret');
+                                let found = false;
+                                frets.forEach(f => {
+                                    if (!found && f.dataset.note === noteStr) {
+                                        f.classList.add('note-playing');
+                                        const cleanId = setTimeout(() => f.classList.remove('note-playing'), Math.min(400, msPerBeat));
+                                        playbackTimeouts.push(cleanId);
+                                        found = true;
+                                    }
+                                });
+                            }, i * msPerBeat);
+                            playbackTimeouts.push(timeoutId);
+                        }
+
+                        // Schedule next loop or stop
+                        const loopEndId = setTimeout(() => {
+                            if (isPlaying && shouldLoop) {
+                                playSequence(); // recursive loop
+                            } else if (isPlaying && !shouldLoop) {
+                                stopPlayback();
+                            }
+                        }, totalSequenceMs + 100);
+                        playbackTimeouts.push(loopEndId);
+                    };
+
+                    playSequence();
+
                 } else {
                     showMessage('Failed to play melody', 'error');
+                    stopPlayback();
                 }
             } catch (error) {
                 showMessage('Failed to play melody', 'error');
-            } finally {
-                this.disabled = false;
-                this.textContent = '🎵 Play Melody';
+                stopPlayback();
             }
         });
 
@@ -495,7 +752,7 @@
             this.textContent = '✨ Composing...';
 
             try {
-                const result = await apiCall('/dusty_jukebox/api/auto_compose/', {
+                const result = await apiCall("{% url 'dusty_jukebox:auto_compose' %}", {
                     method: 'POST',
                     body: JSON.stringify({ scale: 'a_minor' })
                 });
@@ -556,6 +813,25 @@
                 }
             `;
             document.head.appendChild(style);
+        });
+
+        // Modal Event Listeners
+        const dropCModal = document.getElementById('dropCModal');
+        const openDropCChartBtn = document.getElementById('openDropCChartBtn');
+        const closeDropCModal = document.getElementById('closeDropCModal');
+
+        openDropCChartBtn.addEventListener('click', () => {
+            dropCModal.style.display = 'block';
+        });
+
+        closeDropCModal.addEventListener('click', () => {
+            dropCModal.style.display = 'none';
+        });
+
+        window.addEventListener('click', (event) => {
+            if (event.target == dropCModal) {
+                dropCModal.style.display = 'none';
+            }
         });
 
         // Keyboard shortcuts

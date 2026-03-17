@@ -1,481 +1,348 @@
-from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST, require_GET
-from django.conf import settings
-from django.core.files.storage import default_storage
-from django.core.files.base import ContentFile
-from django.contrib.auth.decorators import login_required
-from django.utils import timezone
+from __future__ import annotations
+
 import json
-import os
-import random
+from datetime import datetime, timezone
 from pathlib import Path
-import subprocess
-import hashlib
-# import pdb
 
-# pdb.set_trace()  # Commented out debugging code
-# Try to import pygame, but make it optional
+from django.conf import settings
+from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.shortcuts import render
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_GET, require_http_methods
 
+from .audio_analyser import AudioAnalyser
+from .models import AudioFile, AudioMetadata, GuitarTuning, MusicalScale
 
-try:
-    import pygame
-    PYGAME_AVAILABLE = True
-except ImportError:
-    pygame = None
-    PYGAME_AVAILABLE = False
-
-from .models import (
-    AudioMetadata, AudioFile, GuitarTuning, MusicalScale, UserSession
-)
+CHROMATIC_SHARPS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+SHARP_TO_FLAT = {"C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb"}
 
 
-# Initialize pygame mixer if available
-if PYGAME_AVAILABLE and pygame:
-    pygame.mixer.init()
+def _note_name_flat(name: str) -> str:
+    return SHARP_TO_FLAT.get(name, name)
 
-# GuitarBud Views
-def guitar_bud_view(request):
-    """Main GuitarBud fretboard view"""
-    # Get or create user session
-    session_key = request.session.session_key
-    if not session_key:
-        request.session.create()
-        session_key = request.session.session_key
 
-    user_session, created = UserSession.objects.get_or_create(
-        session_key=session_key,
-        defaults={'user': request.user if request.user.is_authenticated else None}
+def _note_to_index(note: str) -> int:
+    note = note.strip()
+    if not note:
+        raise ValueError("Empty note")
+
+    letter = note[0].upper()
+    rest = note[1:]
+
+    accidental = ""
+    if rest and rest[0] in ["#", "b"]:
+        accidental = rest[0]
+        rest = rest[1:]
+
+    octave = int(rest)
+
+    base = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}[letter]
+    if accidental == "#":
+        base += 1
+    elif accidental == "b":
+        base -= 1
+
+    pitch = (base % 12 + 12) % 12
+    midi = (octave + 1) * 12 + pitch
+    return midi
+
+
+def _index_to_note_flat(midi: int) -> str:
+    pitch = midi % 12
+    octave = midi // 12 - 1
+    note = _note_name_flat(CHROMATIC_SHARPS[pitch])
+    return f"{note}{octave}"
+
+
+def _media_root() -> Path:
+    mr = getattr(settings, "MEDIA_ROOT", None)
+    if mr:
+        return Path(mr)
+    return Path.cwd() / "media"
+
+
+@ensure_csrf_cookie
+@require_GET
+def dusty_jukebox_view(request: HttpRequest) -> HttpResponse:
+    return render(request, "dusty_jukebox/dusty_jukebox.html")
+
+
+@ensure_csrf_cookie
+@require_GET
+def guitar_bud_view(request: HttpRequest) -> HttpResponse:
+    tunings = list(GuitarTuning.objects.all().order_by("display_name"))
+    current = None
+
+    requested = request.GET.get("tuning")
+    if requested:
+        current = GuitarTuning.objects.filter(name=requested).first()
+
+    if current is None:
+        current = GuitarTuning.objects.filter(is_standard=True).first()
+
+    if current is None and tunings:
+        current = tunings[0]
+
+    return render(
+        request,
+        "dusty_jukebox/guitar_bud.html",
+        {"available_tunings": tunings, "current_tuning": current},
     )
 
-    # Ensure default tunings exist
-    if GuitarTuning.objects.count() == 0:
-        GuitarTuning.create_default_tunings()
 
-    # Ensure default scales exist
-    if MusicalScale.objects.count() == 0:
-        MusicalScale.create_default_scales()
-
-    context = {
-        'current_tuning': user_session.current_tuning or GuitarTuning.objects.filter(name='standard').first(),
-        'available_tunings': GuitarTuning.objects.all(),
-        'available_scales': MusicalScale.objects.all(),
-    }
-
-    return render(request, 'dusty_jukebox/guitar_bud.html', context)
+@ensure_csrf_cookie
+@require_GET
+def piano_view(request: HttpRequest) -> HttpResponse:
+    return render(request, "dusty_jukebox/piano.html")
 
 
 @require_GET
-def get_fretboard_data(request):
-    """API endpoint to get fretboard data for a tuning"""
-    tuning_name = request.GET.get('tuning', 'standard')
-
-    try:
-        tuning = GuitarTuning.objects.get(name=tuning_name)
-        string_notes = tuning.get_string_notes()
-
-        # Build fretboard data
-        fretboard_data = {
-            'tuning': tuning.display_name,
-            'tuning_name': tuning.name,
-            'strings': [],
-            'notes': {}
+def get_tunings(request: HttpRequest) -> JsonResponse:
+    tunings = GuitarTuning.objects.all().order_by("display_name")
+    return JsonResponse(
+        {
+            "success": True,
+            "tunings": [
+                {
+                    "name": t.name,
+                    "display_name": t.display_name,
+                    "string_notes": t.string_notes,
+                    "is_standard": t.is_standard,
+                    "difficulty_level": t.difficulty_level,
+                }
+                for t in tunings
+            ],
         }
-
-        chromatic = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-        frets = 22
-
-        for string_index, open_note in enumerate(string_notes):
-            string_data = {
-                'open_note': open_note,
-                'frets': []
-            }
-
-            for fret in range(frets + 1):
-                if open_note not in chromatic:
-                    note_name = "?"
-                else:
-                    start_index = chromatic.index(open_note)
-                    chromatic_index = (start_index + fret) % 12
-                    octave = 4 + ((start_index + fret) // 12)
-                    note_name = f"{chromatic[chromatic_index]}{octave}"
-
-                string_data['frets'].append({
-                    'fret': fret,
-                    'note': note_name,
-                    'has_audio': True  # Simplified - in real implementation check if audio file exists
-                })
-
-                # Store note positions for reverse lookup
-                if note_name not in fretboard_data['notes']:
-                    fretboard_data['notes'][note_name] = []
-                fretboard_data['notes'][note_name].append({
-                    'string': string_index,
-                    'fret': fret
-                })
-
-            fretboard_data['strings'].append(string_data)
-
-        return JsonResponse(fretboard_data)
-
-    except GuitarTuning.DoesNotExist:
-        return JsonResponse({'error': 'Tuning not found'}, status=404)
-
-
-@require_POST
-@csrf_exempt
-def play_melody(request):
-    """API endpoint to play a melody"""
-    try:
-        data = json.loads(request.body)
-        melody_text = data.get('melody', '')
-
-        if not melody_text:
-            return JsonResponse({'success': False, 'error': 'No melody provided'})
-
-        # Parse melody (simplified implementation)
-        notes = [note.strip() for note in melody_text.replace(',', ' ').split() if note.strip()]
-
-        # In a real implementation, this would play actual audio files
-        # For now, just return success with the parsed notes
-        result = {
-            'success': True,
-            'melody': notes,
-            'message': f'Would play {len(notes)} notes'
-        }
-
-        return JsonResponse(result)
-
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
-
-
-@require_POST
-@csrf_exempt
-def auto_compose(request):
-    """API endpoint for auto-composition"""
-    try:
-        data = json.loads(request.body)
-        scale_name = data.get('scale', 'a_minor')
-
-        # Get scale from database
-        try:
-            scale = MusicalScale.objects.get(name=scale_name.replace(' ', '_').lower())
-            scale_notes = scale.get_notes()
-        except MusicalScale.DoesNotExist:
-            # Fallback to A minor
-            scale_notes = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
-
-        # Generate melody
-        melody_length = 8
-        melody = []
-
-        for _ in range(melody_length):
-            note = random.choice(scale_notes)
-            octave = random.choice([3, 4, 5])
-            melody.append(f"{note}{octave}")
-
-        # Generate chord progression (simplified)
-        chord_progression = ["Am", "Dm", "Em", "F", "G", "C", "Bdim"]
-
-        result = {
-            'success': True,
-            'scale': scale_name,
-            'melody': melody,
-            'chords': chord_progression[:4],
-            'tempo': 120,
-            'note_duration': 0.5
-        }
-
-        return JsonResponse(result)
-
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
-
-
-# DustyJukebox (Audio Player) Views
-def dusty_jukebox_view(request):
-    """Main DustyJukebox audio player view"""
-    try:
-        # Get or create user session
-        session_key = request.session.session_key
-        if not session_key:
-            request.session.create()
-            session_key = request.session.session_key
-
-        user_session, created = UserSession.objects.get_or_create(
-            session_key=session_key,
-            defaults={'user': request.user if request.user.is_authenticated else None}
-        )
-
-        # Get user's uploaded files
-        user_files = AudioFile.objects.filter(user=request.user) if request.user.is_authenticated else []
-
-        context = {
-            'user_files': user_files,
-            'has_files': user_files.exists(),
-        }
-
-        return render(request, 'dusty_jukebox/dusty_jukebox.html', context)
-    except Exception as e:
-        # Fallback in case of any errors
-        context = {
-            'user_files': [],
-            'has_files': False,
-            'error': str(e),
-        }
-        return render(request, 'dusty_jukebox/dusty_jukebox.html', context)
+    )
 
 
 @require_GET
-def get_audio_files(request):
-    """API endpoint to get list of audio files"""
-    if request.user.is_authenticated:
-        files = AudioFile.objects.filter(user=request.user)
-    else:
-        # For anonymous users, return empty list or demo files
-        files = AudioFile.objects.none()
-
-    files_data = []
-    for file_obj in files:
-        files_data.append({
-            'id': file_obj.id,
-            'name': file_obj.file_name,
-            'path': file_obj.file_path,
-            'size': file_obj.file_size,
-            'uploaded_at': file_obj.uploaded_at.isoformat(),
-            'metadata': {
-                'bpm': file_obj.metadata.bpm if file_obj.metadata else None,
-                'key': file_obj.metadata.key if file_obj.metadata else None,
-                'is_minor': file_obj.metadata.is_minor if file_obj.metadata else False,
-            } if file_obj.metadata else None
-        })
-
-    return JsonResponse({'files': files_data})
+def get_scales(request: HttpRequest) -> JsonResponse:
+    scales = MusicalScale.objects.all().order_by("display_name")
+    return JsonResponse(
+        {
+            "success": True,
+            "scales": [
+                {
+                    "name": s.name,
+                    "display_name": s.display_name,
+                    "notes": s.notes,
+                    "intervals": s.intervals,
+                    "tonality": s.tonality,
+                }
+                for s in scales
+            ],
+        }
+    )
 
 
-@require_POST
-@csrf_exempt
-def upload_audio(request):
-    """API endpoint to upload audio files"""
-    if 'files' not in request.FILES:
-        return JsonResponse({'success': False, 'error': 'No files provided'})
+@require_GET
+def get_fretboard_data(request: HttpRequest) -> JsonResponse:
+    tuning_name = request.GET.get("tuning")
 
-    uploaded_files = []
-    files = request.FILES.getlist('files')
+    tuning = None
+    if tuning_name:
+        tuning = GuitarTuning.objects.filter(name=tuning_name).first()
+        if tuning is None:
+            tuning = GuitarTuning.objects.filter(display_name=tuning_name).first()
 
-    for file in files:
-        if not file.name:
-            continue
+    if tuning is None:
+        tuning = GuitarTuning.objects.filter(is_standard=True).first()
 
-        # Validate file type
-        allowed_extensions = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac'}
-        file_extension = Path(file.name).suffix.lower()
+    if tuning is None:
+        tuning = GuitarTuning.objects.first()
 
-        if file_extension not in allowed_extensions:
-            continue
-
-        # Save file
-        file_path = f"audio/{request.user.id if request.user.is_authenticated else 'anonymous'}/{file.name}"
-        saved_path = default_storage.save(file_path, ContentFile(file.read()))
-
-        # Create database record
-        audio_file = AudioFile.objects.create(
-            user=request.user if request.user.is_authenticated else None,
-            file_name=file.name,
-            file_path=saved_path,
-            file_size=file.size,
-            mime_type=file.content_type or 'audio/mpeg'
+    if tuning is None:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "No tunings found. Run: python manage.py populate_defaults",
+            },
+            status=400,
         )
 
-        uploaded_files.append({
-            'id': audio_file.id,
-            'name': audio_file.file_name,
-            'size': audio_file.get_file_size_display(),
-            'path': audio_file.file_path
-        })
+    frets = int(request.GET.get("frets", 16))
+    strings = []
 
-    return JsonResponse({
-        'success': len(uploaded_files) > 0,
-        'files': uploaded_files
-    })
+    # Reverse the strings so that the highest string is at the top of the fretboard UI.
+    for open_note in reversed(tuning.string_notes):
+        base_midi = _note_to_index(open_note)
+        frets_out = []
+        for fret in range(frets + 1):
+            frets_out.append(
+                {"fret": fret, "note": _index_to_note_flat(base_midi + fret)}
+            )
+        strings.append({"open_note": open_note, "frets": frets_out})
+
+    return JsonResponse(
+        {
+            "success": True,
+            "tuning": tuning.display_name,
+            "tuning_name": tuning.name,
+            "frets": frets,
+            "strings": strings,
+        }
+    )
 
 
-@require_POST
-@csrf_exempt
-def analyze_audio(request):
-    """API endpoint to analyze audio file for BPM and key"""
+@require_http_methods(["POST"])
+def play_melody(request: HttpRequest) -> JsonResponse:
+    # With synth tones, browser plays sound; this endpoint is just an echo/validator.
     try:
-        data = json.loads(request.body)
-        file_path = data.get('path', '')
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+        melody_raw = (payload.get("melody") or "").strip()
+        if not melody_raw:
+            return JsonResponse(
+                {"success": False, "error": "No melody provided"}, status=400
+            )
+        notes = [n for n in melody_raw.replace(",", " ").split() if n]
+        return JsonResponse({"success": True, "melody": notes})
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=400)
 
-        if not file_path:
-            return JsonResponse({'success': False, 'error': 'No file path provided'})
 
-        # Get or create metadata record
-        file_hash = AudioMetadata.get_file_hash(file_path)
-        if not file_hash:
-            return JsonResponse({'success': False, 'error': 'Could not read file'})
+@require_http_methods(["POST"])
+def auto_compose(request: HttpRequest) -> JsonResponse:
+    # Keep a simple default; you can expand later.
+    return JsonResponse(
+        {
+            "success": True,
+            "scale": "A Minor",
+            "melody": ["A3", "B3", "C4", "D4"],
+            "chords": ["Am", "Dm", "Em", "F"],
+        }
+    )
 
-        metadata, created = AudioMetadata.objects.get_or_create(
-            file_hash=file_hash,
-            defaults={
-                'file_path': file_path,
-                'file_name': Path(file_path).name,
-                'file_size': Path(file_path).stat().st_size,
-                'last_modified': timezone.now(),
+
+@require_http_methods(["POST"])
+def analyze_audio(request: HttpRequest) -> JsonResponse:
+    up = request.FILES.get("file")
+    if not up:
+        return JsonResponse(
+            {"success": False, "error": "Missing file field"}, status=400
+        )
+
+    upload_dir = _media_root() / "dusty_jukebox_uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = Path(up.name).name
+    dest = (
+        upload_dir
+        / f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{safe_name}"
+    )
+
+    with dest.open("wb") as f:
+        for chunk in up.chunks():
+            f.write(chunk)
+
+    stat = dest.stat()
+    last_modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+    file_hash = AudioMetadata.compute_hash(
+        str(dest), str(stat.st_size), str(stat.st_mtime)
+    )
+
+    metadata, _ = AudioMetadata.objects.update_or_create(
+        file_path=str(dest),
+        defaults={
+            "file_hash": file_hash,
+            "file_name": safe_name,
+            "file_size": stat.st_size,
+            "last_modified": last_modified,
+        },
+    )
+
+    try:
+        result = AudioAnalyser.analyze_file(
+            str(dest), save_metadata=True, metadata_model=metadata
+        )
+        return JsonResponse(
+            {
+                "success": True,
+                "bpm": result.get("bpm"),
+                "key": result.get("key"),
+                "is_minor": result.get("is_minor", False),
+                "waveform": result.get("waveform_data", []),
+                # optional if you want it later in UI:
+                # "waveform_image": result.get("waveform_image"),
             }
         )
-
-        # If already analyzed and file hasn't changed, return cached results
-        if not created and metadata.is_analysis_complete():
-            return JsonResponse({
-                'success': True,
-                'bpm': metadata.bpm,
-                'key': metadata.key,
-                'is_minor': metadata.is_minor,
-                'waveform': metadata.get_waveform_samples(),
-                'cached': True
-            })
-
-        # Perform analysis using external script
-        try:
-            analyzer_script = Path(settings.BASE_DIR) / "dusty_jukebox" / "audio_analyser.py"
-            if not analyzer_script.exists():
-                return JsonResponse({'success': False, 'error': 'Audio analyzer not found'})
-
-            result = subprocess.run([
-                'python', str(analyzer_script), file_path
-            ], capture_output=True, text=True, timeout=30, cwd=settings.BASE_DIR)
-
-            if result.returncode == 0:
-                # Parse output
-                bpm = 0
-                key = "Unknown"
-
-                for line in result.stdout.split('\n'):
-                    if line.startswith("BPM:"):
-                        try:
-                            bpm = float(line.replace("BPM:", "").strip())
-                        except:
-                            pass
-                    elif line.startswith("KEY:"):
-                        key = line.replace("KEY:", "").strip()
-
-                # Update metadata
-                metadata.bpm = bpm
-                metadata.key = key
-                metadata.is_minor = 'minor' in key.lower()
-                metadata.analysis_date = timezone.now()
-
-                # Generate simple waveform (placeholder)
-                metadata.set_waveform_samples([random.randint(0, 255) for _ in range(200)])
-
-                metadata.save()
-
-                return JsonResponse({
-                    'success': True,
-                    'bpm': bpm,
-                    'key': key,
-                    'is_minor': metadata.is_minor,
-                    'waveform': metadata.get_waveform_samples()
-                })
-            else:
-                return JsonResponse({
-                    'success': False,
-                    'error': result.stderr or 'Analysis failed'
-                })
-
-        except subprocess.TimeoutExpired:
-            return JsonResponse({'success': False, 'error': 'Analysis timeout'})
-        except Exception as e:
-            return JsonResponse({'success': False, 'error': str(e)})
-
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
-
-
-@require_POST
-@csrf_exempt
-def load_track(request):
-    """API endpoint to load an audio track"""
-    try:
-        data = json.loads(request.body)
-        file_path = data.get('path', '')
-
-        if not file_path:
-            return JsonResponse({'success': False, 'error': 'No file path provided'})
-
-        # In a real implementation, this would initialize pygame with the track
-        # For now, just return success
-        return JsonResponse({
-            'success': True,
-            'path': file_path,
-            'message': 'Track loaded (pygame integration would go here)'
-        })
-
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
-
-
-@require_POST
-@csrf_exempt
-def play_audio(request):
-    """API endpoint to play/pause audio"""
-    try:
-        data = json.loads(request.body)
-        action = data.get('action', 'play')
-
-        # In a real implementation, this would control pygame playback
-        return JsonResponse({
-            'success': True,
-            'action': action,
-            'message': f'Audio {action} (pygame integration would go here)'
-        })
-
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
-
-
-@require_POST
-@csrf_exempt
-def set_volume(request):
-    """API endpoint to set volume"""
-    try:
-        data = json.loads(request.body)
-        volume = float(data.get('volume', 0.5))
-
-        volume = max(0.0, min(1.0, volume))
-
-        # In a real implementation, this would set pygame volume
-        return JsonResponse({
-            'success': True,
-            'volume': volume,
-            'message': f'Volume set to {volume} (pygame integration would go here)'
-        })
-
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
-
-
-# Utility Views
-@require_GET
-def get_scales(request):
-    """Get available musical scales"""
-    scales = MusicalScale.objects.all()
-    scales_data = [{'name': s.name, 'display_name': s.display_name} for s in scales]
-    return JsonResponse({'scales': scales_data})
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
 @require_GET
-def get_tunings(request):
-    """Get available guitar tunings"""
-    tunings = GuitarTuning.objects.all()
-    tunings_data = [{'name': t.name, 'display_name': t.display_name} for t in tunings]
-    return JsonResponse({'tunings': tunings_data})
+def get_audio_files(request: HttpRequest) -> JsonResponse:
+    files = AudioFile.objects.order_by("-uploaded_at")[:200]
+    return JsonResponse(
+        {
+            "success": True,
+            "files": [
+                {
+                    "id": f.id,
+                    "file_name": f.file_name,
+                    "status": f.status,
+                    "uploaded_at": f.uploaded_at.isoformat(),
+                    "metadata_id": f.metadata_id,
+                }
+                for f in files
+            ],
+        }
+    )
 
 
-def audio_analyzer_view(request):
-    """Simple audio analyzer interface"""
-    return render(request, 'dusty_jukebox/audio_analyzer.html')
+@require_http_methods(["POST"])
+def upload_audio(request: HttpRequest) -> JsonResponse:
+    up = request.FILES.get("file")
+    if not up:
+        return JsonResponse(
+            {"success": False, "error": "Missing file field"}, status=400
+        )
+
+    upload_dir = _media_root() / "dusty_jukebox_uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = Path(up.name).name
+    dest = (
+        upload_dir
+        / f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{safe_name}"
+    )
+
+    with dest.open("wb") as f:
+        for chunk in up.chunks():
+            f.write(chunk)
+
+    stat = dest.stat()
+
+    audio_file = AudioFile.objects.create(
+        file_name=safe_name,
+        file_path=str(dest),
+        file_size=stat.st_size,
+        mime_type=getattr(up, "content_type", "") or "application/octet-stream",
+        status=AudioFile.STATUS_UPLOADED,
+        user=(
+            request.user
+            if getattr(request, "user", None) and request.user.is_authenticated
+            else None
+        ),
+    )
+    return JsonResponse({"success": True, "id": audio_file.id})
+
+
+@require_http_methods(["POST"])
+def load_track(request: HttpRequest) -> JsonResponse:
+    return JsonResponse({"success": True})
+
+
+@require_http_methods(["POST"])
+def play_audio(request: HttpRequest) -> JsonResponse:
+    return JsonResponse({"success": True})
+
+
+@require_http_methods(["POST"])
+def set_volume(request: HttpRequest) -> JsonResponse:
+    return JsonResponse({"success": True})
+
+
+@require_GET
+def audio_analyzer_view(request: HttpRequest) -> HttpResponse:
+    return render(request, "dusty_jukebox/dusty_jukebox.html")

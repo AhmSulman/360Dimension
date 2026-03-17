@@ -473,31 +473,15 @@
     <div class="container">
         <!-- Audio File List -->
         <div class="file-list-section">
-            <h2>🎵 Audio Files</h2>
+            <h2>🎵 Local Audio Files</h2>
             <div class="file-list" id="fileList">
-                {% if has_files %}
-                    {% for file in user_files %}
-                    <div class="file-item" onclick="selectFile('{{ file.file_path }}', {{ forloop.counter0 }})">
-                        <div class="file-name">{{ file.file_name }}</div>
-                        <div class="file-meta">
-                            <span>{{ file.get_file_size_display }}</span>
-                            {% if file.metadata %}
-                                <span>BPM: {{ file.metadata.bpm|default:'--' }} | Key: {{ file.metadata.key|default:'--' }}</span>
-                            {% else %}
-                                <span>Not analyzed</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="file-item">
-                        <div class="file-name">No files uploaded</div>
-                        <div class="file-meta">Click "Upload Files" to add audio files</div>
-                    </div>
-                {% endif %}
+                <div class="file-item">
+                    <div class="file-name">No files selected</div>
+                    <div class="file-meta">Click "Select Files" to choose local audio files</div>
+                </div>
             </div>
             <input type="file" id="fileInput" multiple accept="audio/*" style="display: none;" onchange="handleFileSelect(event)">
-            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📁 Upload Files</button>
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📁 Select Local Files</button>
         </div>
 
         <!-- Player Controls -->
@@ -548,50 +532,36 @@
             <button class="guitar-btn" onclick="openGuitarBud()">
                 🎸 Open Guitar Bud
             </button>
+            <button class="guitar-btn" style="margin-top: 10px; background: linear-gradient(45deg, #e74c3c, #c0392b);" onclick="openPianoTutor()">
+                🎹 Open Piano Tutor
+            </button>
         </div>
     </div>
 
     <script>
         // Global state
-        let currentAudio = null;
+        let currentFile = null;
         let isPlaying = false;
-        let currentFilePath = null;
-        let audioContext = null;
-        let analyser = null;
-        let audioBuffer = null;
-
-        // API helper functions
-        async function apiCall(endpoint, options = {}) {
-            try {
-                const response = await fetch(endpoint, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCookie('csrftoken'),
-                        ...options.headers
-                    },
-                    ...options
-                });
-                return await response.json();
-            } catch (error) {
-                console.error('API call failed:', error);
-                showMessage('API Error: ' + error.message, 'error');
-                return null;
-            }
-        }
+        let localFiles = [];
+        let audioPlayer = new Audio();
+        
+        // Setup Audio Player Event Listeners
+        audioPlayer.addEventListener('timeupdate', updateProgress);
+        audioPlayer.addEventListener('ended', () => {
+            isPlaying = false;
+            updatePlayButton();
+        });
 
         // Show status messages
         function showMessage(message, type = 'info') {
-            // Remove existing messages
             const existing = document.querySelectorAll('.status-message');
             existing.forEach(msg => msg.remove());
 
-            // Create new message
             const messageEl = document.createElement('div');
             messageEl.className = `status-message status-${type}`;
             messageEl.textContent = message;
             document.body.appendChild(messageEl);
 
-            // Auto-remove after 3 seconds
             setTimeout(() => {
                 if (messageEl.parentNode) {
                     messageEl.style.animation = 'slideOut 0.3s ease';
@@ -600,144 +570,142 @@
             }, 3000);
         }
 
+        // Handle file selection
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            if (files.length === 0) return;
+            
+            localFiles = files;
+            const fileListEl = document.getElementById('fileList');
+            fileListEl.innerHTML = '';
+            
+            files.forEach((file, index) => {
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                const html = `
+                    <div class="file-item" id="file-item-${index}" onclick="selectFile(${index})">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-meta">
+                            <span>${sizeMB} MB</span>
+                            <span id="meta-${index}">Not analyzed</span>
+                        </div>
+                    </div>
+                `;
+                fileListEl.insertAdjacentHTML('beforeend', html);
+            });
+            
+            // Auto-select first file
+            selectFile(0);
+        }
+
         // Select a file
-        function selectFile(filePath, index) {
-            // Update UI to show selected file
+        function selectFile(index) {
             const fileItems = document.querySelectorAll('.file-item');
             fileItems.forEach(item => item.classList.remove('active'));
-            fileItems[index].classList.add('active');
+            const selectedItem = document.getElementById(`file-item-${index}`);
+            if (selectedItem) selectedItem.classList.add('active');
 
-            currentFilePath = filePath;
+            currentFile = localFiles[index];
+            currentFileIndex = index;
+            
+            // Set audio source
+            const objectUrl = URL.createObjectURL(currentFile);
+            audioPlayer.src = objectUrl;
+            
+            // Reset displays
+            document.getElementById('bpmDisplay').textContent = `BPM: --`;
+            document.getElementById('keyDisplay').textContent = `Key: --`;
+            const placeholder = document.getElementById('waveformPlaceholder');
+            const canvas = document.getElementById('waveformCanvas');
+            placeholder.style.display = 'block';
+            canvas.style.display = 'none';
+            document.getElementById('progressSlider').value = 0;
+            document.getElementById('timeDisplay').textContent = '0:00 / 0:00';
 
-            // Update metadata display
-            updateMetadataDisplay(filePath);
-
-            showMessage('File selected: ' + filePath.split('/').pop(), 'success');
+            showMessage('File selected: ' + currentFile.name, 'success');
         }
 
-        // Update metadata display
-        async function updateMetadataDisplay(filePath) {
-            try {
-                const response = await apiCall('/dusty_jukebox/api/analyze/', {
-                    method: 'POST',
-                    body: JSON.stringify({ path: filePath })
-                });
-
-                if (response && response.success) {
-                    document.getElementById('bpmDisplay').textContent = `BPM: ${response.bpm}`;
-                    document.getElementById('keyDisplay').textContent = `Key: ${response.key}`;
-
-                    if (response.is_minor) {
-                        document.getElementById('keyDisplay').classList.add('minor');
-                    } else {
-                        document.getElementById('keyDisplay').classList.remove('minor');
-                    }
-
-                    // Show waveform if available
-                    if (response.waveform) {
-                        displayWaveform(response.waveform);
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to load metadata:', error);
-            }
-        }
-
-        // Load and play track
-        async function loadTrack() {
-            if (!currentFilePath) {
+        // Load track
+        function loadTrack() {
+            if (!currentFile) {
                 showMessage('Please select a file first', 'error');
                 return;
             }
-
-            try {
-                const response = await apiCall('/dusty_jukebox/api/load_track/', {
-                    method: 'POST',
-                    body: JSON.stringify({ path: currentFilePath })
-                });
-
-                if (response && response.success) {
-                    showMessage('Track loaded successfully', 'success');
-                } else {
-                    showMessage('Failed to load track', 'error');
-                }
-            } catch (error) {
-                console.error('Failed to load track:', error);
-                showMessage('Failed to load track', 'error');
-            }
+            audioPlayer.currentTime = 0;
+            showMessage('Track restarted', 'success');
         }
 
         // Play audio
-        async function playAudio() {
-            try {
-                const response = await apiCall('/dusty_jukebox/api/play/', {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'play' })
-                });
-
-                if (response && response.success) {
-                    isPlaying = true;
-                    updatePlayButton();
-                    showMessage('Playing', 'success');
-                } else {
-                    showMessage('Failed to play audio', 'error');
-                }
-            } catch (error) {
-                console.error('Failed to play audio:', error);
-                showMessage('Failed to play audio', 'error');
+        function playAudio() {
+            if (!currentFile) {
+                showMessage('Please select a file first', 'error');
+                return;
             }
+            audioPlayer.play().then(() => {
+                isPlaying = true;
+                updatePlayButton();
+            }).catch(e => {
+                console.error("Playback failed:", e);
+                showMessage('Playback failed', 'error');
+            });
         }
 
         // Pause audio
-        async function pauseAudio() {
-            try {
-                const response = await apiCall('/dusty_jukebox/api/play/', {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'pause' })
-                });
-
-                if (response && response.success) {
-                    isPlaying = false;
-                    updatePlayButton();
-                    showMessage('Paused', 'info');
-                } else {
-                    showMessage('Failed to pause audio', 'error');
-                }
-            } catch (error) {
-                console.error('Failed to pause audio:', error);
-                showMessage('Failed to pause audio', 'error');
-            }
+        function pauseAudio() {
+            audioPlayer.pause();
+            isPlaying = false;
+            updatePlayButton();
         }
 
         // Analyze audio
         async function analyzeAudio() {
-            if (!currentFilePath) {
+            if (!currentFile) {
                 showMessage('Please select a file first', 'error');
                 return;
             }
 
-            document.getElementById('analyzeBtn').innerHTML = '<span class="loading"></span> Analyzing...';
-            document.getElementById('analyzeBtn').disabled = true;
+            const btn = document.getElementById('analyzeBtn');
+            btn.innerHTML = '<span class="loading"></span> Analyzing...';
+            btn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', currentFile);
 
             try {
-                const response = await apiCall('/dusty_jukebox/api/analyze/', {
+                const response = await fetch("{% url 'dusty_jukebox:analyze_audio' %}", {
                     method: 'POST',
-                    body: JSON.stringify({ path: currentFilePath })
+                    body: formData,
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') }
                 });
 
-                if (response && response.success) {
-                    // Update displays
-                    updateMetadataDisplay(currentFilePath);
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('bpmDisplay').textContent = `BPM: ${result.bpm}`;
+                    
+                    const keyDisplay = document.getElementById('keyDisplay');
+                    keyDisplay.textContent = `Key: ${result.key}`;
+                    if (result.is_minor) {
+                        keyDisplay.classList.add('minor');
+                    } else {
+                        keyDisplay.classList.remove('minor');
+                    }
+
+                    if (result.waveform) {
+                        displayWaveform(result.waveform);
+                    }
+                    
+                    // Update list item
+                    document.getElementById(`meta-${currentFileIndex}`).textContent = `BPM: ${result.bpm} | Key: ${result.key}`;
                     showMessage('Analysis complete!', 'success');
                 } else {
-                    showMessage('Analysis failed: ' + (response.error || 'Unknown error'), 'error');
+                    showMessage('Analysis failed: ' + (result.error || 'Unknown error'), 'error');
                 }
             } catch (error) {
                 console.error('Analysis failed:', error);
                 showMessage('Analysis failed', 'error');
             } finally {
-                document.getElementById('analyzeBtn').innerHTML = '🔍 Analyze';
-                document.getElementById('analyzeBtn').disabled = false;
+                btn.innerHTML = '🔍 Analyze';
+                btn.disabled = false;
             }
         }
 
@@ -754,7 +722,6 @@
                 const width = canvas.width = canvas.offsetWidth;
                 const height = canvas.height = canvas.offsetHeight;
 
-                // Draw waveform (simplified version)
                 ctx.clearRect(0, 0, width, height);
                 ctx.strokeStyle = '#FFD700';
                 ctx.lineWidth = 2;
@@ -772,37 +739,27 @@
                     } else {
                         ctx.lineTo(x, y);
                     }
-
                     x += sliceWidth;
                 }
-
                 ctx.stroke();
-            }
-        }
-
-        // Update progress
-        function updateProgress() {
-            if (currentAudio) {
-                const progress = (currentAudio.currentTime / currentAudio.duration) * 100;
-                document.getElementById('progressSlider').value = progress;
-                updateTimeDisplay();
-            }
-        }
-
-        // Update time display
-        function updateTimeDisplay() {
-            if (currentAudio) {
-                const current = formatTime(currentAudio.currentTime);
-                const total = formatTime(currentAudio.duration || 0);
-                document.getElementById('timeDisplay').textContent = `${current} / ${total}`;
             }
         }
 
         // Format time in MM:SS
         function formatTime(seconds) {
+            if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
             const mins = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60);
             return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Update progress
+        function updateProgress() {
+            if (audioPlayer.duration) {
+                const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                document.getElementById('progressSlider').value = progress;
+                document.getElementById('timeDisplay').textContent = `${formatTime(audioPlayer.currentTime)} / ${formatTime(audioPlayer.duration)}`;
+            }
         }
 
         // Update play button state
@@ -819,67 +776,23 @@
 
         // Progress slider change
         document.getElementById('progressSlider').addEventListener('input', function() {
-            // In a real implementation, this would seek the audio
-            showMessage(`Seeking to: ${this.value}%`, 'info');
+            if (audioPlayer.duration) {
+                audioPlayer.currentTime = (this.value / 100) * audioPlayer.duration;
+            }
         });
 
         // Volume slider change
-        document.getElementById('volumeSlider').addEventListener('input', async function() {
-            try {
-                const response = await apiCall('/dusty_jukebox/api/volume/', {
-                    method: 'POST',
-                    body: JSON.stringify({ volume: parseFloat(this.value) })
-                });
-
-                if (response && response.success) {
-                    showMessage(`Volume: ${Math.round(response.volume * 100)}%`, 'success');
-                }
-            } catch (error) {
-                console.error('Failed to set volume:', error);
-            }
+        document.getElementById('volumeSlider').addEventListener('input', function() {
+            audioPlayer.volume = parseFloat(this.value);
         });
-
-        // Handle file selection
-        function handleFileSelect(event) {
-            const files = Array.from(event.target.files);
-            uploadFiles(files);
-        }
-
-        // Upload files to server
-        async function uploadFiles(files) {
-            if (files.length === 0) return;
-
-            const formData = new FormData();
-            files.forEach(file => {
-                formData.append('files', file);
-            });
-
-            try {
-                const response = await fetch('/dusty_jukebox/api/upload/', {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-CSRFToken': getCookie('csrftoken')
-                    }
-                });
-
-                const result = await response.json();
-                if (result.success) {
-                    showMessage(`Uploaded ${files.length} files`, 'success');
-                    // Reload file list
-                    location.reload();
-                } else {
-                    showMessage('Upload failed', 'error');
-                }
-            } catch (error) {
-                console.error('Upload failed:', error);
-                showMessage('Upload failed', 'error');
-            }
-        }
 
         // Open GuitarBud
         function openGuitarBud() {
             window.location.href = '{% url "dusty_jukebox:guitar_bud" %}';
+        }
+
+        function openPianoTutor() {
+            window.location.href = '{% url "dusty_jukebox:piano" %}';
         }
 
         // Get CSRF token

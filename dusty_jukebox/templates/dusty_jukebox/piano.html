@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Piano Tutor - 360Dimension</title>
+    {% load static %}
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #2c3e50 0%, #1a252f 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #FFD700;
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.3s ease;
+            font-weight: bold;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 2rem;
+            gap: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .piano-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+
+        .side-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            width: 350px;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .piano-wrapper {
+            background: #111;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8), inset 0 2px 5px rgba(255,255,255,0.2);
+            position: relative;
+            margin-bottom: 30px;
+            border-bottom: 15px solid #0a0a0a;
+        }
+
+        .piano {
+            display: flex;
+            position: relative;
+            border-radius: 0 0 5px 5px;
+        }
+
+        /* White Keys */
+        .key-white {
+            width: 60px;
+            height: 250px;
+            background: linear-gradient(to bottom, #fff 0%, #eee 100%);
+            border: 1px solid #ccc;
+            border-radius: 0 0 5px 5px;
+            position: relative;
+            cursor: pointer;
+            box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 #fff, inset 1px 0 0 #fff, inset -1px 0 0 #fff, 0 4px 3px rgba(0,0,0,0.5);
+            transition: background 0.1s, transform 0.1s, box-shadow 0.1s;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 15px;
+            color: #333;
+            font-weight: bold;
+            font-size: 14px;
+            user-select: none;
+            z-index: 1;
+        }
+
+        .key-white:active, .key-white.active {
+            background: #e0e0e0;
+            transform: translateY(4px) rotateX(2deg);
+            box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 #fff, inset 1px 0 0 #fff, inset -1px 0 0 #fff, 0 0 1px rgba(0,0,0,0.5);
+        }
+
+        /* Black Keys */
+        .key-black {
+            width: 40px;
+            height: 150px;
+            background: linear-gradient(to bottom, #333 0%, #000 100%);
+            border: 1px solid #000;
+            border-radius: 0 0 4px 4px;
+            position: absolute;
+            cursor: pointer;
+            box-shadow: inset 0px -1px 2px rgba(255,255,255,0.4), 0 2px 3px rgba(0,0,0,0.5);
+            transition: background 0.1s, transform 0.1s, box-shadow 0.1s;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 10px;
+            color: #aaa;
+            font-size: 12px;
+            font-weight: bold;
+            user-select: none;
+            z-index: 2;
+        }
+
+        .key-black:active, .key-black.active {
+            background: linear-gradient(to bottom, #222 0%, #000 100%);
+            transform: translateY(2px) rotateX(2deg);
+            box-shadow: inset 0px -1px 1px rgba(255,255,255,0.2), 0 0 1px rgba(0,0,0,0.5);
+        }
+
+        /* Keyboard Mapping Hint */
+        .key-hint {
+            position: absolute;
+            bottom: 35px;
+            font-size: 10px;
+            color: #888;
+        }
+        .key-black .key-hint {
+            bottom: 25px;
+            color: #666;
+        }
+        
+        /* Positioning Black Keys */
+        /* C3 to B4 */
+        .db3 { left: 40px; }
+        .eb3 { left: 100px; }
+        .gb3 { left: 220px; }
+        .ab3 { left: 280px; }
+        .bb3 { left: 340px; }
+        
+        .db4 { left: 460px; }
+        .eb4 { left: 520px; }
+        .gb4 { left: 640px; }
+        .ab4 { left: 700px; }
+        .bb4 { left: 760px; }
+
+        .controls {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 20px 40px;
+            border-radius: 12px;
+            display: flex;
+            gap: 30px;
+            align-items: center;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .control-label {
+            color: #FFD700;
+            font-weight: bold;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 150px;
+            background: transparent;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #FFD700;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+        }
+
+        .instructions {
+            margin-top: 30px;
+            text-align: center;
+            color: #ccc;
+            max-width: 600px;
+            line-height: 1.6;
+        }
+
+        .highlight-text {
+            color: #FFD700;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🎹 Piano Tutor</h1>
+        <div style="display: flex; gap: 10px;">
+            <a href="{% url 'dusty_jukebox:guitar_bud' %}" class="back-btn" style="background: rgba(231, 76, 60, 0.8);">🎸 GuitarBud</a>
+            <a href="{% url 'intro:home' %}" class="back-btn">← Back to Home</a>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="piano-section">
+            <div class="piano-wrapper">
+                <div class="piano" id="piano">
+                    <!-- White Keys (C3 to B4) -->
+                    <div class="key-white" data-note="C3" data-key="A"><span class="key-hint">A</span>C3</div>
+                    <div class="key-white" data-note="D3" data-key="S"><span class="key-hint">S</span>D3</div>
+                    <div class="key-white" data-note="E3" data-key="D"><span class="key-hint">D</span>E3</div>
+                    <div class="key-white" data-note="F3" data-key="F"><span class="key-hint">F</span>F3</div>
+                    <div class="key-white" data-note="G3" data-key="G"><span class="key-hint">G</span>G3</div>
+                    <div class="key-white" data-note="A3" data-key="H"><span class="key-hint">H</span>A3</div>
+                    <div class="key-white" data-note="B3" data-key="J"><span class="key-hint">J</span>B3</div>
+                    
+                    <div class="key-white" data-note="C4" data-key="K"><span class="key-hint">K</span>C4</div>
+                    <div class="key-white" data-note="D4" data-key="L"><span class="key-hint">L</span>D4</div>
+                    <div class="key-white" data-note="E4" data-key="Z"><span class="key-hint">Z</span>E4</div>
+                    <div class="key-white" data-note="F4" data-key="X"><span class="key-hint">X</span>F4</div>
+                    <div class="key-white" data-note="G4" data-key="C"><span class="key-hint">C</span>G4</div>
+                    <div class="key-white" data-note="A4" data-key="V"><span class="key-hint">V</span>A4</div>
+                    <div class="key-white" data-note="B4" data-key="B"><span class="key-hint">B</span>B4</div>
+
+                    <!-- Black Keys (C3 to B4) -->
+                    <div class="key-black db3" data-note="Db3" data-key="W"><span class="key-hint">W</span>Db3</div>
+                    <div class="key-black eb3" data-note="Eb3" data-key="E"><span class="key-hint">E</span>Eb3</div>
+                    <!-- space F -->
+                    <div class="key-black gb3" data-note="Gb3" data-key="T"><span class="key-hint">T</span>Gb3</div>
+                    <div class="key-black ab3" data-note="Ab3" data-key="Y"><span class="key-hint">Y</span>Ab3</div>
+                    <div class="key-black bb3" data-note="Bb3" data-key="U"><span class="key-hint">U</span>Bb3</div>
+                    
+                    <div class="key-black db4" data-note="Db4" data-key="O"><span class="key-hint">O</span>Db4</div>
+                    <div class="key-black eb4" data-note="Eb4" data-key="P"><span class="key-hint">P</span>Eb4</div>
+                    <div class="key-black gb4" data-note="Gb4" data-key="F"><span class="key-hint">D</span>Gb4</div> <!-- remapped F doesn't make sense since F is white, let's fix keys in JS -->
+                    <div class="key-black ab4" data-note="Ab4" data-key="G"><span class="key-hint">F</span>Ab4</div>
+                    <div class="key-black bb4" data-note="Bb4" data-key="H"><span class="key-hint">G</span>Bb4</div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="control-group">
+                    <label class="control-label">Master Volume</label>
+                    <input type="range" id="volumeControl" min="0" max="1" step="0.05" value="0.7">
+                </div>
+            </div>
+
+            <div class="instructions">
+                <p>Use your <span class="highlight-text">Mouse</span> to click the keys or use your <span class="highlight-text">Computer Keyboard</span> to play!</p>
+                <p style="margin-top: 10px; font-size: 14px;">High-quality acoustic piano samples are loaded for a realistic playing experience.</p>
+            </div>
+        </div>
+
+        <div class="side-panel">
+            <h2 style="color: #FFD700; font-size: 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;">🎹 Piano Chord Viewer</h2>
+            
+            <div class="control-group">
+                <label class="control-label">Select Chord:</label>
+                <select id="chordSelector" style="padding: 10px; border-radius: 8px; font-size: 16px;">
+                    <option value="">-- Choose Chord --</option>
+                    <option value="C">C Major</option>
+                    <option value="D">D Major</option>
+                    <option value="E">E Major</option>
+                    <option value="F">F Major</option>
+                    <option value="G">G Major</option>
+                    <option value="A">A Major</option>
+                    <option value="B">B Major</option>
+                    
+                    <option value="Cm">C Minor</option>
+                    <option value="Dm">D Minor</option>
+                    <option value="Em">E Minor</option>
+                    <option value="Fm">F Minor</option>
+                    <option value="Gm">G Minor</option>
+                    <option value="Am">A Minor</option>
+                    <option value="Bm">B Minor</option>
+                </select>
+            </div>
+            <button id="playChordBtn" style="padding: 10px; border:none; border-radius:8px; cursor:pointer; font-weight:bold; background: linear-gradient(135deg, #FFD700, #FFA500);">🎵 Show & Play Chord</button>
+            
+            <h2 style="color: #FFD700; font-size: 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px; margin-top: 20px;">🎼 Melody Composer</h2>
+            
+            <div class="control-group">
+                <label class="control-label">Tempo (BPM):</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="number" id="tempoInput" value="120" min="40" max="240" style="flex: 1; padding: 5px;">
+                    <label style="color: white; display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <input type="checkbox" id="loopCheckbox" style="transform: scale(1.2);"> Loop
+                    </label>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Notes to Play (Melody):</label>
+                <textarea id="melodyTextBox" rows="3" placeholder="Enter notes like: C4, D4, E4..." style="padding: 8px; border-radius: 8px;"></textarea>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Chords to Play (Harmony):</label>
+                <textarea id="chordTextBox" rows="2" placeholder="Enter chords like: Am - F - C - G" style="padding: 8px; border-radius: 8px;"></textarea>
+            </div>
+            
+            <div style="display: flex; gap: 10px; flex-direction: column;">
+                <button id="playMelodyBtn" style="padding: 12px; border:none; border-radius:8px; cursor:pointer; font-weight:bold; background: linear-gradient(135deg, #3498db, #2980b9); color: white;">🎵 Play Melody</button>
+                <button id="autoComposeBtn" style="padding: 12px; border:none; border-radius:8px; cursor:pointer; font-weight:bold; background: linear-gradient(135deg, #95a5a6, #7f8c8d); color: white;">✨ Auto Compose (A Minor)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preload Audio Context slightly -->
+    <script>
+        // Fix up the data-keys for second octave black keys visually
+        document.querySelector('.gb4').dataset.key = 'D'; // Wait, D is E3. Let's remap completely in JS.
+        
+        const KEY_MAPPINGS = {
+            // White Keys
+            'a': 'C3', 's': 'D3', 'd': 'E3', 'f': 'F3', 'g': 'G3', 'h': 'A3', 'j': 'B3',
+            'k': 'C4', 'l': 'D4', 'z': 'E4', 'x': 'F4', 'c': 'G4', 'v': 'A4', 'b': 'B4',
+            // Black Keys
+            'w': 'Db3', 'e': 'Eb3', 't': 'Gb3', 'y': 'Ab3', 'u': 'Bb3',
+            'o': 'Db4', 'p': 'Eb4', '1': 'Gb4', '2': 'Ab4', '3': 'Bb4'
+        };
+
+        // Fix Visual Hints
+        const visualHints = {
+            'C3':'A', 'D3':'S', 'E3':'D', 'F3':'F', 'G3':'G', 'A3':'H', 'B3':'J',
+            'C4':'K', 'D4':'L', 'E4':'Z', 'F4':'X', 'G4':'C', 'A4':'V', 'B4':'B',
+            'Db3':'W', 'Eb3':'E', 'Gb3':'T', 'Ab3':'Y', 'Bb3':'U',
+            'Db4':'O', 'Eb4':'P', 'Gb4':'1', 'Ab4':'2', 'Bb4':'3'
+        };
+
+        const keys = document.querySelectorAll('.key-white, .key-black');
+        keys.forEach(key => {
+            const note = key.dataset.note;
+            const hintChar = visualHints[note];
+            if (hintChar) {
+                key.dataset.key = hintChar;
+                const hintEl = key.querySelector('.key-hint');
+                if(hintEl) hintEl.textContent = hintChar;
+            }
+        });
+
+        const volumeControl = document.getElementById('volumeControl');
+        
+        // Audio Cache
+        const audioCache = {};
+
+        function getAudioUrl(note) {
+            // Using same Logic as GuitarBud
+            return `{% static 'dusty_jukebox/Piano/Piano.pp.' %}${note}.wav`;
+        }
+
+        // Preload function
+        function preloadAudio() {
+            Object.values(KEY_MAPPINGS).forEach(note => {
+                const audio = new Audio(getAudioUrl(note));
+                audio.load();
+                audioCache[note] = audio;
+            });
+        }
+        
+        // Start preloading quietly
+        window.addEventListener('load', preloadAudio);
+
+        // Play Note
+        function playNote(note) {
+            const vol = parseFloat(volumeControl.value);
+            
+            // Allow overlapping same note by cloning the audio node
+            const url = getAudioUrl(note);
+            const audio = new Audio(url);
+            audio.volume = vol;
+            
+            audio.play().catch(e => {
+                console.warn(`Could not play audio for ${note}:`, e);
+            });
+
+            // Visual feedback
+            const keyEl = document.querySelector(`[data-note="${note}"]`);
+            if (keyEl) {
+                keyEl.classList.add('active');
+                setTimeout(() => keyEl.classList.remove('active'), 150);
+            }
+        }
+
+        // Mouse Events
+        keys.forEach(key => {
+            key.addEventListener('mousedown', () => {
+                playNote(key.dataset.note);
+            });
+        });
+
+        // Keyboard Events
+        const pressedKeys = new Set();
+        document.addEventListener('keydown', (e) => {
+            // Ignore if typing in an input (not relevant here but good practice)
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            
+            const char = e.key.toLowerCase();
+            if (KEY_MAPPINGS[char] && !pressedKeys.has(char)) {
+                pressedKeys.add(char);
+                playNote(KEY_MAPPINGS[char]);
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            const char = e.key.toLowerCase();
+            pressedKeys.delete(char);
+        });
+
+        // === CHORD SELECTOR LOGIC ===
+        const chordDict = {
+            'C':  ['C3', 'E3', 'G3'],
+            'D':  ['D3', 'Gb3', 'A3'],  // Piano Gb3 is actually F#
+            'E':  ['E3', 'Ab3', 'B3'],  // Piano Ab3 is actually G#
+            'F':  ['F3', 'A3', 'C4'],
+            'G':  ['G3', 'B3', 'D4'],
+            'A':  ['A3', 'Db4', 'E4'],  // Piano Db4 is actually C#
+            'B':  ['B3', 'Eb4', 'Gb4'], // Piano Eb4 = D#, Gb4 = F#
+            
+            'Cm': ['C3', 'Eb3', 'G3'],
+            'Dm': ['D3', 'F3', 'A3'],
+            'Em': ['E3', 'G3', 'B3'],
+            'Fm': ['F3', 'Ab3', 'C4'],
+            'Gm': ['G3', 'Bb3', 'D4'],
+            'Am': ['A3', 'C4', 'E4'],
+            'Bm': ['B3', 'D4', 'Gb4']
+        };
+
+        function playChord(chordName) {
+            if(!chordName) return;
+            const notes = chordDict[chordName.trim()];
+            if (notes) {
+                notes.forEach(note => playNote(note));
+            }
+        }
+
+        document.getElementById('playChordBtn').addEventListener('click', () => {
+            const selector = document.getElementById('chordSelector');
+            playChord(selector.value);
+        });
+
+        // === API HELPERS (from GuitarBud) ===
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        async function apiCall(endpoint, options = {}) {
+            try {
+                const response = await fetch(endpoint, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        ...options.headers
+                    },
+                    ...options
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                return null;
+            }
+        }
+
+        // === COMPOSER LOGIC ===
+        let playbackTimeouts = [];
+        let isPlaying = false;
+
+        function stopPlayback() {
+            playbackTimeouts.forEach(t => clearTimeout(t));
+            playbackTimeouts = [];
+            isPlaying = false;
+            const btn = document.getElementById('playMelodyBtn');
+            btn.textContent = '🎵 Play Melody';
+            btn.style.background = 'linear-gradient(135deg, #3498db, #2980b9)';
+        }
+
+        document.getElementById('playMelodyBtn').addEventListener('click', async function() {
+            if (isPlaying) {
+                stopPlayback();
+                return;
+            }
+
+            const melodyText = document.getElementById('melodyTextBox').value.trim();
+            const chordText = document.getElementById('chordTextBox').value.trim();
+            const bpm = parseInt(document.getElementById('tempoInput').value) || 120;
+            const msPerBeat = 60000 / bpm;
+            const shouldLoop = document.getElementById('loopCheckbox').checked;
+
+            if (!melodyText) {
+                alert('Please enter some notes in the melody textbox!');
+                return;
+            }
+
+            isPlaying = true;
+            this.textContent = '⏹ Stop Playback';
+            this.style.background = 'linear-gradient(135deg, #e74c3c, #c0392b)';
+
+            try {
+                // Assuming play_melody calculates full sequenced list
+                const result = await apiCall("{% url 'dusty_jukebox:play_melody' %}", {
+                    method: 'POST',
+                    body: JSON.stringify({ melody: melodyText })
+                });
+
+                if (result && result.success) {
+                    
+                    const chords = chordText ? chordText.split('-').map(c => c.trim()).filter(c => c) : [];
+                    const totalSequenceMs = result.melody.length * msPerBeat;
+
+                    const playSequence = () => {
+                        if (!isPlaying) return;
+
+                        for (let i = 0; i < result.melody.length; i++) {
+                            const timeoutId = setTimeout(() => {
+                                let noteStr = result.melody[i];
+
+                                // Note mapping fix for API returned sharps -> Flat mapping for piano WAVs
+                                const SHARP_TO_FLAT = {"C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb"};
+                                const m = /^([A-Ga-g])([#b]?)(\d+)$/.exec(noteStr);
+                                if (m) {
+                                    let letter = m[1].toUpperCase();
+                                    if (m[2] === '#') {
+                                        let flatName = SHARP_TO_FLAT[letter + '#'];
+                                        if (flatName) noteStr = flatName + m[3];
+                                    } else {
+                                        noteStr = letter + m[2] + m[3];
+                                    }
+                                }
+
+                                playNote(noteStr);
+                                
+                                if (i % 4 === 0 && chords.length > 0) {
+                                    const chordIdx = (i / 4) % chords.length;
+                                    playChord(chords[Math.floor(chordIdx)]);
+                                }
+                            }, i * msPerBeat);
+                            playbackTimeouts.push(timeoutId);
+                        }
+
+                        const loopEndId = setTimeout(() => {
+                            if (isPlaying && shouldLoop) {
+                                playSequence();
+                            } else if (isPlaying && !shouldLoop) {
+                                stopPlayback();
+                            }
+                        }, totalSequenceMs + 100);
+                        playbackTimeouts.push(loopEndId);
+                    };
+
+                    playSequence();
+
+                } else {
+                    alert('Failed to play melody');
+                    stopPlayback();
+                }
+            } catch (error) {
+                alert('Failed to play melody');
+                stopPlayback();
+            }
+        });
+
+        document.getElementById('autoComposeBtn').addEventListener('click', async function() {
+            this.textContent = '✨ Composing...';
+            try {
+                const result = await apiCall("{% url 'dusty_jukebox:auto_compose' %}", {
+                    method: 'POST',
+                    body: JSON.stringify({ scale: 'a_minor' })
+                });
+
+                if (result) {
+                    document.getElementById('melodyTextBox').value = result.melody.join(', ');
+                    document.getElementById('chordTextBox').value = result.chords.join(' - ');
+                }
+            } finally {
+                this.textContent = '✨ Auto Compose (A Minor)';
+            }
+        });
+
+    </script>
+</body>
+</html>
