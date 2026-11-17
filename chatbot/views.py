@@ -70,7 +70,7 @@ def chatbot_api(request):
             # Create default config if none exists
             config = ChatbotConfig.objects.create(
                 name="Default Mistral Config",
-                mistral_api_key="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",
+                mistral_api_key=os.environ.get("HF_API_TOKEN", ""),
                 mistral_model="mistralai/Mistral-7B-Instruct-v0.3",
                 mistral_model_version="v0.3",
                 mistral_model_version_number=3,

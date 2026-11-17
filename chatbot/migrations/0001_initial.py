@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.CharField(default='Mistral Chatbot', max_length=100)),
-                ('mistral_api_key', models.CharField(default='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', max_length=200)),
+                ('mistral_api_key', models.CharField(blank=True, default='', max_length=200)),
                 ('mistral_model', models.CharField(default='mistralai/Mistral-7B-Instruct-v0.3', max_length=200)),
                 ('mistral_model_version', models.CharField(default='v0.3', max_length=50)),
                 ('mistral_model_version_number', models.IntegerField(default=3)),
