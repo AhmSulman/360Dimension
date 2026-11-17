@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from django.db import models
 from django.conf import settings
@@ -11,7 +12,7 @@ class ChatbotConfig(models.Model):
 
     name = models.CharField(max_length=100, default="Mistral Chatbot")
     mistral_api_key = models.CharField(
-        max_length=200, default="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"
+        max_length=200, default="", blank=True
     )
     mistral_model = models.CharField(
         max_length=200, default="mistralai/Mistral-7B-Instruct-v0.3"
@@ -132,7 +133,7 @@ def get_default_config():
     config, created = ChatbotConfig.objects.get_or_create(
         name="Default Mistral Config",
         defaults={
-            "mistral_api_key": "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",
+            "mistral_api_key": os.environ.get("HF_API_TOKEN", ""),
             "mistral_model": "mistralai/Mistral-7B-Instruct-v0.3",
             "mistral_model_version": "v0.3",
             "mistral_model_version_number": 3,
@@ -164,7 +165,7 @@ class MistralChatService:
             f"https://api-inference.huggingface.co/models/{self.config.mistral_model}"
         )
         headers = {
-            "Authorization": f"Bearer {self.config.mistral_api_key}",
+            "Authorization": f"Bearer {self.config.mistral_api_key or os.environ.get('HF_API_TOKEN', '')}",
             "Content-Type": "application/json",
         }
 

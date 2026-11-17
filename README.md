@@ -7,7 +7,7 @@
   - Integrated `audio_analyser.py` via an API endpoint that handles intermediate temp files and correctly fetches BPM/Key analysis.
 - **Chatbot App Refactored**:
   - Replaced the unoptimized local Mistral model loading (which struggled with memory constraints) with a fast, lightweight HTTP call to the Hugging Face Inference API. 
-  - Integrated the provided API token, drastically improving response times and stability without needing heavy local models.
+  - Reads the Hugging Face token from the `HF_API_TOKEN` environment variable, drastically improving response times and stability without needing heavy local models.
 - **Application Validation**:
   - Verified migrations and template rendering for the `blog`, `portfolio`, `intro`, and `about` directories. All models are now cleanly accessible and will handle fallback data gracefully.
 
